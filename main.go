@@ -6,12 +6,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func main() {
+func setupRouter() *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 	router.GET("/ping", func(c *gin.Context) {
 		c.String(http.StatusOK, "pong")
 	})
-	router.Run(":8080")
+	return router
+}
+
+func main() {
+	router := setupRouter()
+	err := router.Run(":8080")
+	if err != nil {
+		panic(err)
+	}
 }

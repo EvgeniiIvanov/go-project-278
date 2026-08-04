@@ -6,6 +6,11 @@ help:
 	@echo "  test      - run tests"
 	@echo "  build     - build project"
 
+DOCKER_FILE ?= Dockerfile
+IMAGE_NAME ?= shortener
+VERSION ?= main
+PORT ?= 8080
+
 .PHONY: fmt
 fmt:
 	go fmt ./...
@@ -29,3 +34,15 @@ test:
 .PHONY: build
 build:
 	go build -o bin/shortener ./main.go
+
+.PHONY: run
+run: build
+	./bin/shortener
+
+.PHONY: docker-build
+docker-build:
+	sudo docker build -f ${DOCKER_FILE} -t ${IMAGE_NAME}:${VERSION} --build-arg VERSION=${VERSION} .
+
+.PHONY: docker-run
+docker-run: docker-build
+	docker run -p 8080:${PORT} ${IMAGE_NAME}:${VERSION}
