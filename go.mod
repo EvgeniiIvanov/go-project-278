@@ -6,6 +6,7 @@ require (
 	github.com/getsentry/sentry-go v0.48.0
 	github.com/getsentry/sentry-go/gin v0.48.0
 	github.com/gin-gonic/gin v1.12.0
+	github.com/joho/godotenv v1.5.1
 	github.com/stretchr/testify v1.11.1
 )
 

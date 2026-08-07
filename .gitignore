@@ -1,5 +1,6 @@
 # Go binaries
-bin/
+bin/*
+!bin/run.sh
 
 # Go test binaries
 *.test
@@ -13,3 +14,7 @@ bin/
 *.swo
 .DS_Store
 tmp/
+
+# Environment files
+.env
+.env.*
