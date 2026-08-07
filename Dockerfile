@@ -19,6 +19,8 @@ FROM alpine:latest
 
 RUN apk add --no-cache ca-certificates
 
+WORKDIR /app
+
 COPY --from=builder /build/app /app/bin/app
 COPY --from=builder build/code/db/migrations /app/db/migrations
 COPY --from=builder /go/bin/goose /usr/local/bin/goose
