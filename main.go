@@ -24,9 +24,6 @@ func setupRouter() *gin.Engine {
 	router.GET("/ping", func(c *gin.Context) {
 		c.String(http.StatusOK, "pong")
 	})
-	router.GET("/error", func(c *gin.Context) {
-		panic("test error for sentry")
-	})
 	return router
 }
 
