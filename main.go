@@ -1,31 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"net/http"
+	"log"
 	"os"
 	"time"
 
+	"code/internal/api"
+	"code/internal/storage"
+
 	"github.com/getsentry/sentry-go"
-	sentrygin "github.com/getsentry/sentry-go/gin"
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
-
-func setupRouter() *gin.Engine {
-	router := gin.New()
-	router.Use(gin.Logger())
-	router.Use(gin.Recovery())
-	router.Use(sentrygin.New(sentrygin.Options{
-		Repanic:         true,
-		WaitForDelivery: true,
-		Timeout:         5 * time.Second,
-	}))
-	router.GET("/ping", func(c *gin.Context) {
-		c.String(http.StatusOK, "pong")
-	})
-	return router
-}
 
 func main() {
 	if err := godotenv.Load(); err != nil {
@@ -49,7 +36,22 @@ func main() {
 		defer sentry.Flush(2 * time.Second)
 	}
 
-	router := setupRouter()
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		log.Fatal("DATABASE_URL is required")
+	}
+
+	ctx := context.Background()
+	store, err := storage.NewPostgres(ctx, databaseURL)
+	if err != nil {
+		log.Fatalf("init db: %v", err)
+	}
+	defer store.Close()
+	fmt.Println("Database connection established")
+
+	router := api.NewRouter(store, api.Config{
+		ShortURL: os.Getenv("SHORT_URL"),
+	})
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -57,8 +59,7 @@ func main() {
 	}
 
 	fmt.Printf("Starting server on port %s\n", port)
-	err := router.Run(":" + port)
-	if err != nil {
-		panic(err)
+	if err := router.Run(":" + port); err != nil {
+		log.Fatalf("server failed: %v", err)
 	}
 }

@@ -1,15 +1,20 @@
-package main
+package api_test
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"code/internal/api"
+	"code/internal/storage"
+
 	"github.com/stretchr/testify/assert"
 )
 
 func TestPingRouteTableDriven(t *testing.T) {
-	router := setupRouter()
+	router := api.NewRouter(storage.NewFake(), api.Config{
+		ShortURL: "http://localhost:8080",
+	})
 
 	tests := []struct {
 		name     string

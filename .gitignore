@@ -1,6 +1,5 @@
 # Go binaries
-bin/*
-!bin/run.sh
+bin/
 
 # Go test binaries
 *.test
@@ -18,3 +17,4 @@ tmp/
 # Environment files
 .env
 .env.*
+!.env.example
