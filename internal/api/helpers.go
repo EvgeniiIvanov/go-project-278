@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -78,8 +79,18 @@ func writeStorageError(c *gin.Context, err error) {
 	case errors.Is(err, storage.ErrURLAlreadyExists):
 		c.JSON(http.StatusConflict, gin.H{"error": "link already exists"})
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		writeInternalError(c, err)
 	}
+}
+
+func writeInternalError(c *gin.Context, err error) {
+	log.Printf(
+		"request failed method=%s path=%s status=500 err=%v",
+		c.Request.Method,
+		c.Request.URL.Path,
+		err,
+	)
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 }
 
 func toLinkResponse(link storage.Link) linkResponse {

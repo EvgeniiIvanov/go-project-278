@@ -78,18 +78,18 @@ func (f *Fake) CreateLink(ctx context.Context, input CreateLinkInput) (Link, err
 	return link, nil
 }
 
-func (f *Fake) UpdateLink(ctx context.Context, input UpdateLinkInput) error {
+func (f *Fake) UpdateLink(ctx context.Context, input UpdateLinkInput) (Link, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	link, ok := f.links[input.ID]
 	if !ok {
-		return ErrURLNotFound
+		return Link{}, ErrURLNotFound
 	}
 
 	for id, existing := range f.links {
 		if id != input.ID && existing.ShortName == input.ShortName {
-			return ErrURLAlreadyExists
+			return Link{}, ErrURLAlreadyExists
 		}
 	}
 
@@ -97,7 +97,7 @@ func (f *Fake) UpdateLink(ctx context.Context, input UpdateLinkInput) error {
 	link.ShortURL = input.ShortURL
 	link.ShortName = input.ShortName
 	f.links[input.ID] = link
-	return nil
+	return link, nil
 }
 
 func (f *Fake) DeleteLink(ctx context.Context, id int32) error {

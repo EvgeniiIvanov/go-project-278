@@ -39,7 +39,7 @@ func (s *Server) ping(c *gin.Context) {
 func (s *Server) listLinks(c *gin.Context) {
 	links, err := s.store.ListLinks(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list links"})
+		writeStorageError(c, err)
 		return
 	}
 
@@ -79,7 +79,7 @@ func (s *Server) createLink(c *gin.Context) {
 
 	shortURL, err := s.buildShortURL(shortName)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeInternalError(c, err)
 		return
 	}
 
@@ -115,11 +115,11 @@ func (s *Server) updateLink(c *gin.Context) {
 
 	shortURL, err := s.buildShortURL(shortName)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		writeInternalError(c, err)
 		return
 	}
 
-	err = s.store.UpdateLink(c.Request.Context(), storage.UpdateLinkInput{
+	link, err := s.store.UpdateLink(c.Request.Context(), storage.UpdateLinkInput{
 		ID:          id,
 		OriginalURL: originalURL,
 		ShortURL:    shortURL,
@@ -129,7 +129,7 @@ func (s *Server) updateLink(c *gin.Context) {
 		writeStorageError(c, err)
 		return
 	}
-	c.Status(http.StatusNoContent)
+	c.JSON(http.StatusOK, toLinkResponse(link))
 }
 
 func (s *Server) deleteLink(c *gin.Context) {

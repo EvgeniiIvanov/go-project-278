@@ -14,7 +14,7 @@ type Querier interface {
 	GetLinkByID(ctx context.Context, id int32) (Link, error)
 	GetLinkByShortName(ctx context.Context, shortName string) (Link, error)
 	ListLinks(ctx context.Context) ([]Link, error)
-	UpdateLink(ctx context.Context, arg UpdateLinkParams) (int64, error)
+	UpdateLink(ctx context.Context, arg UpdateLinkParams) (Link, error)
 }
 
 var _ Querier = (*Queries)(nil)

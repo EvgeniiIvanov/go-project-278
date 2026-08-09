@@ -31,7 +31,7 @@ func TestCreateListGetUpdateDeleteAndRedirect(t *testing.T) {
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/urls", bytes.NewReader(raw))
+	req := httptest.NewRequest(http.MethodPost, "/api/links", bytes.NewReader(raw))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -43,12 +43,12 @@ func TestCreateListGetUpdateDeleteAndRedirect(t *testing.T) {
 	assert.Equal(t, "https://example.com/hello", created["original_url"])
 
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/urls", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/links", nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/urls/1", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/links/1", nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
@@ -59,10 +59,15 @@ func TestCreateListGetUpdateDeleteAndRedirect(t *testing.T) {
 	raw, err = json.Marshal(updateBody)
 	require.NoError(t, err)
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPut, "/urls/1", bytes.NewReader(raw))
+	req = httptest.NewRequest(http.MethodPut, "/api/links/1", bytes.NewReader(raw))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusNoContent, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var updated map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &updated))
+	assert.Equal(t, "https://example.org/updated", updated["original_url"])
+	assert.Equal(t, "hello", updated["short_name"])
 
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/hello", nil)
@@ -71,12 +76,12 @@ func TestCreateListGetUpdateDeleteAndRedirect(t *testing.T) {
 	assert.Equal(t, "https://example.org/updated", w.Header().Get("Location"))
 
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodDelete, "/urls/1", nil)
+	req = httptest.NewRequest(http.MethodDelete, "/api/links/1", nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusNoContent, w.Code)
 
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/urls/1", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/links/1", nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusNotFound, w.Code)
 }
@@ -86,28 +91,28 @@ func TestCreateLinkValidationAndConflicts(t *testing.T) {
 
 	// invalid url
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/urls", bytes.NewReader([]byte(`{"original_url":"notaurl","short_name":"x"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/api/links", bytes.NewReader([]byte(`{"original_url":"notaurl","short_name":"x"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	// missing short_name
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/urls", bytes.NewReader([]byte(`{"original_url":"https://example.com"}`)))
+	req = httptest.NewRequest(http.MethodPost, "/api/links", bytes.NewReader([]byte(`{"original_url":"https://example.com"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	// create once
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/urls", bytes.NewReader([]byte(`{"original_url":"https://example.com","short_name":"dup"}`)))
+	req = httptest.NewRequest(http.MethodPost, "/api/links", bytes.NewReader([]byte(`{"original_url":"https://example.com","short_name":"dup"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
 
 	// conflict
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/urls", bytes.NewReader([]byte(`{"original_url":"https://example.com/2","short_name":"dup"}`)))
+	req = httptest.NewRequest(http.MethodPost, "/api/links", bytes.NewReader([]byte(`{"original_url":"https://example.com/2","short_name":"dup"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusConflict, w.Code)

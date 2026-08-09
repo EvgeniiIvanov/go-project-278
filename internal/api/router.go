@@ -32,16 +32,16 @@ func NewRouter(store storage.Storage, cfg Config) *gin.Engine {
 
 	router.GET("/ping", server.ping)
 
-	urls := router.Group("/urls")
+	links := router.Group("/api/links")
 	{
-		urls.GET("", server.listLinks)
-		urls.POST("", server.createLink)
-		urls.GET("/:id", server.getLinkByID)
-		urls.PUT("/:id", server.updateLink)
-		urls.DELETE("/:id", server.deleteLink)
+		links.GET("", server.listLinks)
+		links.POST("", server.createLink)
+		links.GET("/:id", server.getLinkByID)
+		links.PUT("/:id", server.updateLink)
+		links.DELETE("/:id", server.deleteLink)
 	}
 
-	// Public shortener redirect. Keep after /urls and /ping.
+	// Public shortener redirect. Keep after /api/links and /ping.
 	router.GET("/:short_name", server.redirectByShortName)
 
 	return router

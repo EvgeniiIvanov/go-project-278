@@ -41,7 +41,7 @@ type Storage interface {
 	GetLinkByID(ctx context.Context, id int32) (Link, error)
 	GetLinkByShortName(ctx context.Context, shortName string) (Link, error)
 	CreateLink(ctx context.Context, input CreateLinkInput) (Link, error)
-	UpdateLink(ctx context.Context, input UpdateLinkInput) error
+	UpdateLink(ctx context.Context, input UpdateLinkInput) (Link, error)
 	DeleteLink(ctx context.Context, id int32) error
 	Ping(ctx context.Context) error
 	Close()

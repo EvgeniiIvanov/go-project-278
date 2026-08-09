@@ -108,8 +108,8 @@ func (q *Queries) ListLinks(ctx context.Context) ([]Link, error) {
 	return items, nil
 }
 
-const updateLink = `-- name: UpdateLink :execrows
-UPDATE links SET original_url = $1, short_url = $2, short_name = $3 WHERE id = $4
+const updateLink = `-- name: UpdateLink :one
+UPDATE links SET original_url = $1, short_url = $2, short_name = $3 WHERE id = $4 RETURNING id, original_url, short_url, short_name, created_at
 `
 
 type UpdateLinkParams struct {
@@ -119,15 +119,20 @@ type UpdateLinkParams struct {
 	ID          int32  `json:"id"`
 }
 
-func (q *Queries) UpdateLink(ctx context.Context, arg UpdateLinkParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateLink,
+func (q *Queries) UpdateLink(ctx context.Context, arg UpdateLinkParams) (Link, error) {
+	row := q.db.QueryRow(ctx, updateLink,
 		arg.OriginalUrl,
 		arg.ShortUrl,
 		arg.ShortName,
 		arg.ID,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	var i Link
+	err := row.Scan(
+		&i.ID,
+		&i.OriginalUrl,
+		&i.ShortUrl,
+		&i.ShortName,
+		&i.CreatedAt,
+	)
+	return i, err
 }

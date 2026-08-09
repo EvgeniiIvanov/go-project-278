@@ -34,7 +34,7 @@ type fakeQuerier struct {
 	getLinkByIDFn        func(ctx context.Context, id int32) (linksdb.Link, error)
 	getLinkByShortNameFn func(ctx context.Context, shortName string) (linksdb.Link, error)
 	createLinkFn         func(ctx context.Context, arg linksdb.CreateLinkParams) (linksdb.Link, error)
-	updateLinkFn         func(ctx context.Context, arg linksdb.UpdateLinkParams) (int64, error)
+	updateLinkFn         func(ctx context.Context, arg linksdb.UpdateLinkParams) (linksdb.Link, error)
 	deleteLinkFn         func(ctx context.Context, id int32) (int64, error)
 }
 
@@ -50,7 +50,7 @@ func (f *fakeQuerier) GetLinkByShortName(ctx context.Context, shortName string) 
 func (f *fakeQuerier) CreateLink(ctx context.Context, arg linksdb.CreateLinkParams) (linksdb.Link, error) {
 	return f.createLinkFn(ctx, arg)
 }
-func (f *fakeQuerier) UpdateLink(ctx context.Context, arg linksdb.UpdateLinkParams) (int64, error) {
+func (f *fakeQuerier) UpdateLink(ctx context.Context, arg linksdb.UpdateLinkParams) (linksdb.Link, error) {
 	return f.updateLinkFn(ctx, arg)
 }
 func (f *fakeQuerier) DeleteLink(ctx context.Context, id int32) (int64, error) {
@@ -107,21 +107,21 @@ func TestCreateLink_UniqueViolation(t *testing.T) {
 func TestUpdateLink_NotFoundAndUnique(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		p := newPostgresWithQuerier(&fakeQuerier{
-			updateLinkFn: func(ctx context.Context, arg linksdb.UpdateLinkParams) (int64, error) {
-				return 0, nil
+			updateLinkFn: func(ctx context.Context, arg linksdb.UpdateLinkParams) (linksdb.Link, error) {
+				return linksdb.Link{}, pgx.ErrNoRows
 			},
 		})
-		err := p.UpdateLink(context.Background(), UpdateLinkInput{ID: 1, ShortName: "a"})
+		_, err := p.UpdateLink(context.Background(), UpdateLinkInput{ID: 1, ShortName: "a"})
 		assert.ErrorIs(t, err, ErrURLNotFound)
 	})
 
 	t.Run("unique violation", func(t *testing.T) {
 		p := newPostgresWithQuerier(&fakeQuerier{
-			updateLinkFn: func(ctx context.Context, arg linksdb.UpdateLinkParams) (int64, error) {
-				return 0, &pgconn.PgError{Code: "23505"}
+			updateLinkFn: func(ctx context.Context, arg linksdb.UpdateLinkParams) (linksdb.Link, error) {
+				return linksdb.Link{}, &pgconn.PgError{Code: "23505"}
 			},
 		})
-		err := p.UpdateLink(context.Background(), UpdateLinkInput{ID: 1, ShortName: "a"})
+		_, err := p.UpdateLink(context.Background(), UpdateLinkInput{ID: 1, ShortName: "a"})
 		assert.ErrorIs(t, err, ErrURLAlreadyExists)
 	})
 }

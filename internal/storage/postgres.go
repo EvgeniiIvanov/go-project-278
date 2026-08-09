@@ -147,23 +147,23 @@ func (p *Postgres) CreateLink(ctx context.Context, input CreateLinkInput) (Link,
 	return toLink(row), nil
 }
 
-func (p *Postgres) UpdateLink(ctx context.Context, input UpdateLinkInput) error {
-	n, err := p.q.UpdateLink(ctx, linksdb.UpdateLinkParams{
+func (p *Postgres) UpdateLink(ctx context.Context, input UpdateLinkInput) (Link, error) {
+	row, err := p.q.UpdateLink(ctx, linksdb.UpdateLinkParams{
 		OriginalUrl: input.OriginalURL,
 		ShortUrl:    input.ShortURL,
 		ShortName:   input.ShortName,
 		ID:          input.ID,
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
-			return ErrURLAlreadyExists
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Link{}, ErrURLNotFound
 		}
-		return fmt.Errorf("update link: %w", err)
+		if isUniqueViolation(err) {
+			return Link{}, ErrURLAlreadyExists
+		}
+		return Link{}, fmt.Errorf("update link: %w", err)
 	}
-	if n == 0 {
-		return ErrURLNotFound
-	}
-	return nil
+	return toLink(row), nil
 }
 
 func (p *Postgres) DeleteLink(ctx context.Context, id int32) error {

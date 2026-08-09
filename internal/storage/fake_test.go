@@ -27,17 +27,14 @@ func TestFakeStorageCRUD(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, created.ID, got.ID)
 
-	err = s.UpdateLink(ctx, UpdateLinkInput{
+	updated, err := s.UpdateLink(ctx, UpdateLinkInput{
 		ID:          created.ID,
 		OriginalURL: "https://example.org",
 		ShortURL:    created.ShortURL,
 		ShortName:   "abc",
 	})
 	require.NoError(t, err)
-
-	gotByID, err := s.GetLinkByID(ctx, created.ID)
-	require.NoError(t, err)
-	assert.Equal(t, "https://example.org", gotByID.OriginalURL)
+	assert.Equal(t, "https://example.org", updated.OriginalURL)
 
 	require.NoError(t, s.DeleteLink(ctx, created.ID))
 	_, err = s.GetLinkByID(ctx, created.ID)
