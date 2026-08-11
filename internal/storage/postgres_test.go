@@ -30,7 +30,8 @@ func TestPoolConfigEnvHelpers(t *testing.T) {
 }
 
 type fakeQuerier struct {
-	listLinksFn          func(ctx context.Context) ([]linksdb.Link, error)
+	listLinksFn          func(ctx context.Context, arg linksdb.ListLinksParams) ([]linksdb.Link, error)
+	countLinksFn         func(ctx context.Context) (int64, error)
 	getLinkByIDFn        func(ctx context.Context, id int32) (linksdb.Link, error)
 	getLinkByShortNameFn func(ctx context.Context, shortName string) (linksdb.Link, error)
 	createLinkFn         func(ctx context.Context, arg linksdb.CreateLinkParams) (linksdb.Link, error)
@@ -38,8 +39,11 @@ type fakeQuerier struct {
 	deleteLinkFn         func(ctx context.Context, id int32) (int64, error)
 }
 
-func (f *fakeQuerier) ListLinks(ctx context.Context) ([]linksdb.Link, error) {
-	return f.listLinksFn(ctx)
+func (f *fakeQuerier) ListLinks(ctx context.Context, arg linksdb.ListLinksParams) ([]linksdb.Link, error) {
+	return f.listLinksFn(ctx, arg)
+}
+func (f *fakeQuerier) CountLinks(ctx context.Context) (int64, error) {
+	return f.countLinksFn(ctx)
 }
 func (f *fakeQuerier) GetLinkByID(ctx context.Context, id int32) (linksdb.Link, error) {
 	return f.getLinkByIDFn(ctx, id)
@@ -140,20 +144,26 @@ func TestDeleteLink_NotFound(t *testing.T) {
 func TestListAndGet_SuccessMapping(t *testing.T) {
 	dbLink := sampleDBLink()
 	p := newPostgresWithQuerier(&fakeQuerier{
-		listLinksFn: func(ctx context.Context) ([]linksdb.Link, error) {
+		listLinksFn: func(ctx context.Context, arg linksdb.ListLinksParams) ([]linksdb.Link, error) {
+			assert.Equal(t, int32(10), arg.Limit)
+			assert.Equal(t, int32(0), arg.Offset)
 			return []linksdb.Link{dbLink}, nil
+		},
+		countLinksFn: func(ctx context.Context) (int64, error) {
+			return 1, nil
 		},
 		getLinkByIDFn: func(ctx context.Context, id int32) (linksdb.Link, error) {
 			return dbLink, nil
 		},
 	})
 
-	links, err := p.ListLinks(context.Background())
+	result, err := p.ListLinks(context.Background(), ListLinksInput{From: 0, To: 9})
 	require.NoError(t, err)
-	require.Len(t, links, 1)
-	assert.Equal(t, int32(1), links[0].ID)
-	assert.Equal(t, "abc", links[0].ShortName)
-	assert.Equal(t, dbLink.CreatedAt.Time, links[0].CreatedAt)
+	require.Len(t, result.Links, 1)
+	assert.Equal(t, int64(1), result.Total)
+	assert.Equal(t, int32(1), result.Links[0].ID)
+	assert.Equal(t, "abc", result.Links[0].ShortName)
+	assert.Equal(t, dbLink.CreatedAt.Time, result.Links[0].CreatedAt)
 
 	got, err := p.GetLinkByID(context.Background(), 1)
 	require.NoError(t, err)

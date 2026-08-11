@@ -43,9 +43,10 @@ func TestCreateListGetUpdateDeleteAndRedirect(t *testing.T) {
 	assert.Equal(t, "https://example.com/hello", created["original_url"])
 
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/api/links", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/links?range=[0,10]", nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "links 0-0/1", w.Header().Get("Content-Range"))
 
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/links/1", nil)
@@ -116,4 +117,33 @@ func TestCreateLinkValidationAndConflicts(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusConflict, w.Code)
+}
+
+func TestListLinksPagination(t *testing.T) {
+	store, router := newTestRouter()
+
+	names := []string{"a", "b", "c"}
+	for _, name := range names {
+		_, err := store.CreateLink(t.Context(), storage.CreateLinkInput{
+			OriginalURL: "https://example.com/" + name,
+			ShortURL:    "http://localhost:8080/" + name,
+			ShortName:   name,
+		})
+		require.NoError(t, err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/links?range=[1,2]", nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "links 1-2/3", w.Header().Get("Content-Range"))
+
+	var page []map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+	require.Len(t, page, 2)
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/links?range=[5,1]", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

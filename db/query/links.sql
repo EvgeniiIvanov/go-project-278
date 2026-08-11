@@ -1,5 +1,10 @@
 -- name: ListLinks :many
-SELECT * FROM links;
+SELECT * FROM links
+ORDER BY id
+LIMIT $1 OFFSET $2;
+
+-- name: CountLinks :one
+SELECT count(*) FROM links;
 
 -- name: GetLinkByID :one
 SELECT * FROM links WHERE id = $1;

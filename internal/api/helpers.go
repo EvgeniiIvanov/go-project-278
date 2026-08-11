@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -12,6 +13,57 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+const (
+	defaultRangeFrom int32 = 0
+	defaultRangeTo   int32 = 9
+	maxRangeWindow   int32 = 100
+)
+
+// parseRangeQuery parses an inclusive range query like "[0,10]" or "0,10".
+// Empty value defaults to [0,9].
+func parseRangeQuery(raw string) (int32, int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return defaultRangeFrom, defaultRangeTo, nil
+	}
+
+	raw = strings.TrimPrefix(raw, "[")
+	raw = strings.TrimSuffix(raw, "]")
+	raw = strings.TrimSpace(raw)
+
+	parts := strings.Split(raw, ",")
+	if len(parts) != 2 {
+		return 0, 0, errors.New(`range must look like "[0,10]"`)
+	}
+
+	from64, err := strconv.ParseInt(strings.TrimSpace(parts[0]), 10, 32)
+	if err != nil {
+		return 0, 0, errors.New("range from must be an integer")
+	}
+	to64, err := strconv.ParseInt(strings.TrimSpace(parts[1]), 10, 32)
+	if err != nil {
+		return 0, 0, errors.New("range to must be an integer")
+	}
+
+	from := int32(from64)
+	to := int32(to64)
+	if from < 0 {
+		return 0, 0, errors.New("range from must be >= 0")
+	}
+	if to < from {
+		return 0, 0, errors.New("range to must be >= from")
+	}
+	if to-from+1 > maxRangeWindow {
+		return 0, 0, fmt.Errorf("range window must be <= %d", maxRangeWindow)
+	}
+
+	return from, to, nil
+}
+
+func formatContentRange(unit string, from, to int32, total int64) string {
+	return fmt.Sprintf("%s %d-%d/%d", unit, from, to, total)
+}
 
 func (s *Server) redirectByShortName(c *gin.Context) {
 	shortName := strings.TrimSpace(c.Param("short_name"))

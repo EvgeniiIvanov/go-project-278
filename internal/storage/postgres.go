@@ -97,17 +97,30 @@ func durationFromEnv(key string, fallback time.Duration) time.Duration {
 	return d
 }
 
-func (p *Postgres) ListLinks(ctx context.Context) ([]Link, error) {
-	rows, err := p.q.ListLinks(ctx)
+func (p *Postgres) ListLinks(ctx context.Context, input ListLinksInput) (ListLinksResult, error) {
+	if input.From < 0 || input.To < input.From {
+		return ListLinksResult{}, fmt.Errorf("invalid list range: from=%d to=%d", input.From, input.To)
+	}
+
+	limit := input.To - input.From + 1
+	rows, err := p.q.ListLinks(ctx, linksdb.ListLinksParams{
+		Limit:  limit,
+		Offset: input.From,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("list links: %w", err)
+		return ListLinksResult{}, fmt.Errorf("list links: %w", err)
+	}
+
+	total, err := p.q.CountLinks(ctx)
+	if err != nil {
+		return ListLinksResult{}, fmt.Errorf("count links: %w", err)
 	}
 
 	links := make([]Link, 0, len(rows))
 	for _, row := range rows {
 		links = append(links, toLink(row))
 	}
-	return links, nil
+	return ListLinksResult{Links: links, Total: total}, nil
 }
 
 func (p *Postgres) GetLinkByID(ctx context.Context, id int32) (Link, error) {

@@ -37,16 +37,33 @@ func (s *Server) ping(c *gin.Context) {
 }
 
 func (s *Server) listLinks(c *gin.Context) {
-	links, err := s.store.ListLinks(c.Request.Context())
+	from, to, err := parseRangeQuery(c.Query("range"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	result, err := s.store.ListLinks(c.Request.Context(), storage.ListLinksInput{
+		From: from,
+		To:   to,
+	})
 	if err != nil {
 		writeStorageError(c, err)
 		return
 	}
 
-	resp := make([]linkResponse, 0, len(links))
-	for _, link := range links {
+	resp := make([]linkResponse, 0, len(result.Links))
+	for _, link := range result.Links {
 		resp = append(resp, toLinkResponse(link))
 	}
+
+	// Content-Range uses inclusive indexes: links <from>-<to>/<total>
+	// If the page is empty, still report the requested from and total.
+	end := from
+	if len(result.Links) > 0 {
+		end = from + int32(len(result.Links)) - 1
+	}
+	c.Header("Content-Range", formatContentRange("links", from, end, result.Total))
 	c.JSON(http.StatusOK, resp)
 }
 

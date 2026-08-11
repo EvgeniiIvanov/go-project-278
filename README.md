@@ -93,8 +93,12 @@ curl -i -X POST "$BASE_URL/api/links" \
 
 #### List links
 
+Inclusive range pagination via `range=[from,to]`.
+Default is `[0,9]`. Response includes `Content-Range: links <from>-<to>/<total>`.
+
 ```bash
-curl -i "$BASE_URL/api/links"
+curl -i "$BASE_URL/api/links?range=[0,10]"
+# Content-Range: links 0-10/11
 ```
 
 #### Get link by id

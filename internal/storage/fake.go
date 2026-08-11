@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -22,15 +24,36 @@ func NewFake() *Fake {
 	}
 }
 
-func (f *Fake) ListLinks(ctx context.Context) ([]Link, error) {
+func (f *Fake) ListLinks(ctx context.Context, input ListLinksInput) (ListLinksResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	result := make([]Link, 0, len(f.links))
-	for _, link := range f.links {
-		result = append(result, link)
+	if input.From < 0 || input.To < input.From {
+		return ListLinksResult{}, fmt.Errorf("invalid list range: from=%d to=%d", input.From, input.To)
 	}
-	return result, nil
+
+	all := make([]Link, 0, len(f.links))
+	for _, link := range f.links {
+		all = append(all, link)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].ID < all[j].ID
+	})
+
+	total := int64(len(all))
+	from := int(input.From)
+	if from >= len(all) {
+		return ListLinksResult{Links: []Link{}, Total: total}, nil
+	}
+
+	to := int(input.To) + 1
+	if to > len(all) {
+		to = len(all)
+	}
+
+	page := make([]Link, to-from)
+	copy(page, all[from:to])
+	return ListLinksResult{Links: page, Total: total}, nil
 }
 
 func (f *Fake) GetLinkByID(ctx context.Context, id int32) (Link, error) {
