@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@hexlet/project-url-shortener-frontend": "^1.0.0"
+  },
+  "allowScripts": {
+    "@hexlet/project-url-shortener-frontend@1.0.0": true
+  }
+}

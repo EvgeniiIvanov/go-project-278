@@ -1,0 +1,38 @@
+{
+	auto_https off
+	admin off
+}
+
+:{$PORT:80} {
+	encode gzip
+
+	# Backend API and health check.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle /ping {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle {
+		root * /app/public
+
+		# Serve real frontend files (js/css/assets/favicon/etc).
+		@file file
+		handle @file {
+			file_server
+		}
+
+		# SPA entrypoint.
+		handle / {
+			rewrite * /index.html
+			file_server
+		}
+
+		# Everything else is a short link -> Go app.
+		handle {
+			reverse_proxy 127.0.0.1:8080
+		}
+	}
+}

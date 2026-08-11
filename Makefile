@@ -5,7 +5,7 @@ help:
 	@echo "  lint-fix       - run linter and fix"
 	@echo "  test           - run tests"
 	@echo "  build          - build project"
-	@echo "  run            - build and run app"
+	@echo "  run            - build and run app (dev mode)"
 	@echo "  sqlc           - generate Go code from SQL queries"
 	@echo "  migrate-up     - apply DB migrations"
 	@echo "  migrate-down   - roll back last DB migration"
@@ -13,13 +13,24 @@ help:
 	@echo "  migrate-create - create a new migration (name=...)"
 	@echo "  postgres-up    - start local Postgres"
 	@echo "  postgres-down  - stop local Postgres and remove volumes"
+	@echo "  prod-build     - build production Docker image (Caddy + app + frontend)"
+	@echo "  prod-run       - run production-style container locally"
+	@echo "  prod-up        - postgres + migrate + prod-run"
+	@echo "  prod-stop      - stop production-style container"
 
 DOCKER_FILE ?= Dockerfile
 IMAGE_NAME ?= shortener
 VERSION ?= main
 PORT ?= 8080
+PUBLIC_PORT ?= 8080
+CONTAINER_PORT ?= 80
 MIGRATIONS_DIR ?= db/migrations
 DATABASE_URL ?= postgres://shortener:dev_password_123@localhost:5432/shortener_dev?sslmode=disable
+# From inside Docker on Mac/Windows, use host.docker.internal to reach local Postgres.
+DOCKER_DATABASE_URL ?= postgres://shortener:dev_password_123@host.docker.internal:5432/shortener_dev?sslmode=disable
+SHORT_URL ?= http://localhost:$(PUBLIC_PORT)
+CONTAINER_NAME ?= shortener-prod
+SENTRY_DSN ?=
 
 .PHONY: fmt
 fmt:
@@ -71,12 +82,41 @@ migrate-create:
 	goose -dir $(MIGRATIONS_DIR) create $(name) sql
 
 .PHONY: docker-build
-docker-build:
-	sudo docker build -f ${DOCKER_FILE} -t ${IMAGE_NAME}:${VERSION} --build-arg VERSION=${VERSION} .
+docker-build: prod-build
 
 .PHONY: docker-run
-docker-run: docker-build
-	docker run -p 8080:${PORT} ${IMAGE_NAME}:${VERSION}
+docker-run: prod-run
+
+.PHONY: prod-build
+prod-build:
+	docker build -f $(DOCKER_FILE) -t $(IMAGE_NAME):$(VERSION) .
+
+.PHONY: prod-run
+prod-run: prod-build
+	-docker rm -f $(CONTAINER_NAME) >/dev/null 2>&1 || true
+	docker run --rm -d \
+		--name $(CONTAINER_NAME) \
+		-p $(PUBLIC_PORT):$(CONTAINER_PORT) \
+		-e PORT=$(CONTAINER_PORT) \
+		-e DATABASE_URL="$(DOCKER_DATABASE_URL)" \
+		-e SHORT_URL="$(SHORT_URL)" \
+		-e SENTRY_DSN="$(SENTRY_DSN)" \
+		$(IMAGE_NAME):$(VERSION)
+	@echo "Production-style app: http://localhost:$(PUBLIC_PORT)"
+	@echo "Health: curl -i http://localhost:$(PUBLIC_PORT)/ping"
+	@echo "Stop:   make prod-stop"
+
+.PHONY: prod-up
+prod-up: postgres-up
+	@echo "Waiting for Postgres..."
+	@sleep 3
+	$(MAKE) migrate-up
+	$(MAKE) prod-run
+
+.PHONY: prod-stop
+prod-stop:
+	-docker rm -f $(CONTAINER_NAME) >/dev/null 2>&1 || true
+	@echo "Stopped $(CONTAINER_NAME)"
 
 .PHONY: postgres-up
 postgres-up:

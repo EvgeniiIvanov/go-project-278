@@ -13,7 +13,15 @@ The app is deployed on Render:
 
 ### Render TODO
 
-Short checklist for deploying / fixing Render:
+Single Docker web service serves both frontend and backend:
+
+- Caddy listens on Render `$PORT`
+- Go API listens internally on `8080`
+- Frontend static files are served from `/app/public`
+- `/api/*`, `/ping`, and short links are proxied to Go
+- SPA routes fall back to `index.html`
+
+Checklist:
 
 1. **Web service**
    - Runtime: Docker
@@ -26,25 +34,26 @@ Short checklist for deploying / fixing Render:
 
 3. **Environment variables**
    - `DATABASE_URL` from Render Postgres
-   - `PORT` is set by Render automatically
+   - `PORT` is set by Render automatically (public Caddy port)
    - `SHORT_URL=https://go-project-278-vs4f.onrender.com`
-   - `CORS_ORIGINS=https://<your-frontend-host>` (comma-separated if several)
    - `SENTRY_DSN=...` (optional)
    - optional pool settings: `DB_MAX_CONNS`, `DB_MIN_CONNS`, ...
+   - `CORS_ORIGINS` is usually unnecessary for same-origin frontend/API
 
 4. **Migrations**
-   - image entrypoint (`scripts/run.sh`) runs `goose up` before the app
-   - if deploy fails with `relation "links" does not exist`, migrations did not apply
+   - image entrypoint (`scripts/run.sh`) runs `goose up` before app/Caddy
+   - if logs show `relation "links" does not exist`, migrations did not apply
    - check Render logs for `[run.sh] Running DB migrations`
 
-5. **Frontend on Render (or elsewhere)**
-   - point the frontend API base URL to the backend public URL
-   - add that frontend origin to backend `CORS_ORIGINS`
-   - expose/read `Content-Range` is already enabled in backend CORS config
+5. **Required committed frontend files**
+   - `package.json`
+   - `package-lock.json`
+   - Docker installs `@hexlet/project-url-shortener-frontend` via `npm ci`
 
 6. **Smoke checks after deploy**
    ```bash
    curl -i https://go-project-278-vs4f.onrender.com/ping
+   curl -i https://go-project-278-vs4f.onrender.com/
    curl -g -i "https://go-project-278-vs4f.onrender.com/api/links?range=[0,10]"
    curl -i -X POST https://go-project-278-vs4f.onrender.com/api/links \
      -H "Content-Type: application/json" \
@@ -56,7 +65,7 @@ Short checklist for deploying / fixing Render:
    - missing/wrong `DATABASE_URL`
    - migrations failed before app start
    - `SHORT_URL` still points to localhost
-   - browser CORS blocked because frontend origin is missing from `CORS_ORIGINS`
+   - `package-lock.json` not committed (`npm ci` fails)
    - free instance cold start: first request can be slow
 
 ### Local development

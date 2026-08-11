@@ -19,10 +19,5 @@ tmp/
 .env.*
 !.env.example
 
-# Node / frontend local install (temporary)
+# Node
 node_modules/
-package.json
-package-lock.json
-npm-shrinkwrap.json
-yarn.lock
-pnpm-lock.yaml
