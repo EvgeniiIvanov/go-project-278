@@ -96,8 +96,12 @@ curl -i -X POST "$BASE_URL/api/links" \
 Inclusive range pagination via `range=[from,to]`.
 Default is `[0,9]`. Response includes `Content-Range: links <from>-<to>/<total>`.
 
+Note: curl treats `[]` as glob characters. Use `-g` (or `--globoff`), or encode brackets as `%5B` / `%5D`.
+
 ```bash
-curl -i "$BASE_URL/api/links?range=[0,10]"
+curl -g -i "$BASE_URL/api/links?range=[0,10]"
+# or
+curl -i "$BASE_URL/api/links?range=%5B0,10%5D"
 # Content-Range: links 0-10/11
 ```
 
