@@ -50,7 +50,8 @@ func main() {
 	fmt.Println("Database connection established")
 
 	router := api.NewRouter(store, api.Config{
-		ShortURL: os.Getenv("SHORT_URL"),
+		ShortURL:    os.Getenv("SHORT_URL"),
+		CORSOrigins: api.ParseCORSOrigins(os.Getenv("CORS_ORIGINS")),
 	})
 
 	port := os.Getenv("PORT")

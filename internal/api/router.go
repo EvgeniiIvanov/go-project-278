@@ -1,17 +1,20 @@
 package api
 
 import (
+	"strings"
 	"time"
 
 	"code/internal/storage"
 
 	sentrygin "github.com/getsentry/sentry-go/gin"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 // Config holds HTTP-layer settings that come from the environment.
 type Config struct {
-	ShortURL string
+	ShortURL    string
+	CORSOrigins []string
 }
 
 // NewRouter builds the application HTTP router.
@@ -24,6 +27,7 @@ func NewRouter(store storage.Storage, cfg Config) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+	router.Use(cors.New(corsConfig(cfg.CORSOrigins)))
 	router.Use(sentrygin.New(sentrygin.Options{
 		Repanic:         true,
 		WaitForDelivery: true,
@@ -45,4 +49,38 @@ func NewRouter(store storage.Storage, cfg Config) *gin.Engine {
 	router.GET("/:short_name", server.redirectByShortName)
 
 	return router
+}
+
+func corsConfig(origins []string) cors.Config {
+	if len(origins) == 0 {
+		origins = []string{"http://localhost:5173"}
+	}
+
+	return cors.Config{
+		AllowOrigins: origins,
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization", "Range"},
+		// Frontend pagination needs to read this header.
+		ExposeHeaders:    []string{"Content-Range", "Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}
+}
+
+// ParseCORSOrigins splits a comma-separated CORS_ORIGINS value.
+func ParseCORSOrigins(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		origin := strings.TrimSpace(part)
+		if origin != "" {
+			origins = append(origins, origin)
+		}
+	}
+	return origins
 }
