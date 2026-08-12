@@ -2,7 +2,6 @@ package api
 
 import (
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -124,10 +123,8 @@ func writeBindError(c *gin.Context, err error) {
 			fields[field] = fe.Error()
 		}
 		writeFieldErrors(c, fields)
-	case errors.Is(err, io.EOF):
-		writeInvalidRequest(c)
 	default:
-		// Malformed JSON / type mismatch / empty body syntax errors.
+		// Malformed JSON, empty body, or type mismatch.
 		writeInvalidRequest(c)
 	}
 }

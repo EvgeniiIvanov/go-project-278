@@ -15,7 +15,6 @@ type Fake struct {
 	nextVisitID    int64
 	links          map[int32]Link
 	visits         []LinkVisit
-	pingErr        error
 	createVisitErr error
 }
 
@@ -144,13 +143,13 @@ func (f *Fake) DeleteLink(ctx context.Context, id int32) error {
 	}
 	delete(f.links, id)
 
-	filtered := f.visits[:0]
+	visits := make([]LinkVisit, 0, len(f.visits))
 	for _, visit := range f.visits {
 		if visit.LinkID != id {
-			filtered = append(filtered, visit)
+			visits = append(visits, visit)
 		}
 	}
-	f.visits = filtered
+	f.visits = visits
 	return nil
 }
 
@@ -216,7 +215,7 @@ func (f *Fake) ListLinkVisits(ctx context.Context, input ListLinkVisitsInput) (L
 }
 
 func (f *Fake) Ping(ctx context.Context) error {
-	return f.pingErr
+	return nil
 }
 
 func (f *Fake) Close() {}
