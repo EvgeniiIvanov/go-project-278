@@ -25,6 +25,8 @@ func NewRouter(store storage.Storage, cfg Config) *gin.Engine {
 	}
 
 	router := gin.New()
+	// Caddy proxies from the same container; trust only local hop for ClientIP().
+	_ = router.SetTrustedProxies([]string{"127.0.0.1", "::1"})
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 	router.Use(cors.New(corsConfig(cfg.CORSOrigins)))
@@ -45,8 +47,10 @@ func NewRouter(store storage.Storage, cfg Config) *gin.Engine {
 		links.DELETE("/:id", server.deleteLink)
 	}
 
-	// Public shortener redirect. Keep after /api/links and /ping.
-	router.GET("/:short_name", server.redirectByShortName)
+	router.GET("/api/link_visits", server.listLinkVisits)
+
+	// Public shortener redirect with visit tracking.
+	router.GET("/r/:code", server.redirectByCode)
 
 	return router
 }

@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -65,20 +64,33 @@ func formatContentRange(unit string, from, to int32, total int64) string {
 	return fmt.Sprintf("%s %d-%d/%d", unit, from, to, total)
 }
 
-func (s *Server) redirectByShortName(c *gin.Context) {
-	shortName := strings.TrimSpace(c.Param("short_name"))
-	if shortName == "" || strings.Contains(shortName, "/") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid short name"})
+func (s *Server) redirectByCode(c *gin.Context) {
+	code := strings.TrimSpace(c.Param("code"))
+	if code == "" || strings.Contains(code, "/") {
+		writeValidationError(c, "invalid code")
 		return
 	}
 
-	link, err := s.store.GetLinkByShortName(c.Request.Context(), shortName)
+	link, err := s.store.GetLinkByShortName(c.Request.Context(), code)
 	if err != nil {
 		writeStorageError(c, err)
 		return
 	}
 
-	c.Redirect(http.StatusFound, link.OriginalURL)
+	status := http.StatusFound
+	_, err = s.store.CreateLinkVisit(c.Request.Context(), storage.CreateLinkVisitInput{
+		LinkID:    link.ID,
+		IP:        c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+		Status:    int32(status),
+	})
+	if err != nil {
+		// Fail closed: do not redirect if visit could not be recorded.
+		writeStorageError(c, err)
+		return
+	}
+
+	c.Redirect(status, link.OriginalURL)
 }
 
 func (s *Server) buildShortURL(shortName string) (string, error) {
@@ -86,14 +98,14 @@ func (s *Server) buildShortURL(shortName string) (string, error) {
 	if base == "" {
 		return "", errors.New("SHORT_URL is not configured")
 	}
-	return base + "/" + shortName, nil
+	return base + "/r/" + shortName, nil
 }
 
 func parseIDParam(c *gin.Context) (int32, bool) {
 	raw := c.Param("id")
 	id64, err := strconv.ParseInt(raw, 10, 32)
 	if err != nil || id64 <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		writeValidationError(c, "invalid id")
 		return 0, false
 	}
 	return int32(id64), true
@@ -124,27 +136,6 @@ func validateLinkInput(originalURL, shortName string) (string, string, error) {
 	return originalURL, shortName, nil
 }
 
-func writeStorageError(c *gin.Context, err error) {
-	switch {
-	case errors.Is(err, storage.ErrURLNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": "link not found"})
-	case errors.Is(err, storage.ErrURLAlreadyExists):
-		c.JSON(http.StatusConflict, gin.H{"error": "link already exists"})
-	default:
-		writeInternalError(c, err)
-	}
-}
-
-func writeInternalError(c *gin.Context, err error) {
-	log.Printf(
-		"request failed method=%s path=%s status=500 err=%v",
-		c.Request.Method,
-		c.Request.URL.Path,
-		err,
-	)
-	c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-}
-
 func toLinkResponse(link storage.Link) linkResponse {
 	return linkResponse{
 		ID:          link.ID,
@@ -152,5 +143,16 @@ func toLinkResponse(link storage.Link) linkResponse {
 		ShortURL:    link.ShortURL,
 		ShortName:   link.ShortName,
 		CreatedAt:   link.CreatedAt,
+	}
+}
+
+func toLinkVisitResponse(visit storage.LinkVisit) linkVisitResponse {
+	return linkVisitResponse{
+		ID:        visit.ID,
+		LinkID:    visit.LinkID,
+		CreatedAt: visit.CreatedAt,
+		IP:        visit.IP,
+		UserAgent: visit.UserAgent,
+		Status:    visit.Status,
 	}
 }

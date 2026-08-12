@@ -31,13 +31,15 @@ type Postgres struct {
 
 // NewPostgres opens a connection pool, pings the database, and returns Storage.
 func NewPostgres(ctx context.Context, databaseURL string) (*Postgres, error) {
+	const op = "storage.postgres.NewPostgres"
+
 	if databaseURL == "" {
-		return nil, fmt.Errorf("database URL is empty")
+		return nil, fmt.Errorf("%s: database URL is empty", op)
 	}
 
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse db config: %w", err)
+		return nil, fmt.Errorf("%s: parse db config: %w", op, err)
 	}
 
 	cfg.MaxConns = int32FromEnv("DB_MAX_CONNS", defaultMaxConns)
@@ -47,17 +49,17 @@ func NewPostgres(ctx context.Context, databaseURL string) (*Postgres, error) {
 	cfg.HealthCheckPeriod = durationFromEnv("DB_HEALTHCHECK_PERIOD", defaultHealthCheckPeriod)
 
 	if cfg.MinConns > cfg.MaxConns {
-		return nil, fmt.Errorf("DB_MIN_CONNS (%d) cannot be greater than DB_MAX_CONNS (%d)", cfg.MinConns, cfg.MaxConns)
+		return nil, fmt.Errorf("%s: DB_MIN_CONNS (%d) cannot be greater than DB_MAX_CONNS (%d)", op, cfg.MinConns, cfg.MaxConns)
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("open db pool: %w", err)
+		return nil, fmt.Errorf("%s: open db pool: %w", op, err)
 	}
 
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("ping db: %w", err)
+		return nil, fmt.Errorf("%s: ping db: %w", op, err)
 	}
 
 	return &Postgres{
@@ -98,8 +100,9 @@ func durationFromEnv(key string, fallback time.Duration) time.Duration {
 }
 
 func (p *Postgres) ListLinks(ctx context.Context, input ListLinksInput) (ListLinksResult, error) {
+	const op = "storage.postgres.ListLinks"
 	if input.From < 0 || input.To < input.From {
-		return ListLinksResult{}, fmt.Errorf("invalid list range: from=%d to=%d", input.From, input.To)
+		return ListLinksResult{}, fmt.Errorf("%s: invalid list range: from=%d to=%d", op, input.From, input.To)
 	}
 
 	limit := input.To - input.From + 1
@@ -108,12 +111,12 @@ func (p *Postgres) ListLinks(ctx context.Context, input ListLinksInput) (ListLin
 		Offset: input.From,
 	})
 	if err != nil {
-		return ListLinksResult{}, fmt.Errorf("list links: %w", err)
+		return ListLinksResult{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	total, err := p.q.CountLinks(ctx)
 	if err != nil {
-		return ListLinksResult{}, fmt.Errorf("count links: %w", err)
+		return ListLinksResult{}, fmt.Errorf("%s: count: %w", op, err)
 	}
 
 	links := make([]Link, 0, len(rows))
@@ -124,28 +127,31 @@ func (p *Postgres) ListLinks(ctx context.Context, input ListLinksInput) (ListLin
 }
 
 func (p *Postgres) GetLinkByID(ctx context.Context, id int32) (Link, error) {
+	const op = "storage.postgres.GetLinkByID"
 	row, err := p.q.GetLinkByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Link{}, ErrURLNotFound
 		}
-		return Link{}, fmt.Errorf("get link by id: %w", err)
+		return Link{}, fmt.Errorf("%s: %w", op, err)
 	}
 	return toLink(row), nil
 }
 
 func (p *Postgres) GetLinkByShortName(ctx context.Context, shortName string) (Link, error) {
+	const op = "storage.postgres.GetLinkByShortName"
 	row, err := p.q.GetLinkByShortName(ctx, shortName)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Link{}, ErrURLNotFound
 		}
-		return Link{}, fmt.Errorf("get link by short name: %w", err)
+		return Link{}, fmt.Errorf("%s: %w", op, err)
 	}
 	return toLink(row), nil
 }
 
 func (p *Postgres) CreateLink(ctx context.Context, input CreateLinkInput) (Link, error) {
+	const op = "storage.postgres.CreateLink"
 	row, err := p.q.CreateLink(ctx, linksdb.CreateLinkParams{
 		OriginalUrl: input.OriginalURL,
 		ShortUrl:    input.ShortURL,
@@ -155,12 +161,13 @@ func (p *Postgres) CreateLink(ctx context.Context, input CreateLinkInput) (Link,
 		if isUniqueViolation(err) {
 			return Link{}, ErrURLAlreadyExists
 		}
-		return Link{}, fmt.Errorf("create link: %w", err)
+		return Link{}, fmt.Errorf("%s: %w", op, err)
 	}
 	return toLink(row), nil
 }
 
 func (p *Postgres) UpdateLink(ctx context.Context, input UpdateLinkInput) (Link, error) {
+	const op = "storage.postgres.UpdateLink"
 	row, err := p.q.UpdateLink(ctx, linksdb.UpdateLinkParams{
 		OriginalUrl: input.OriginalURL,
 		ShortUrl:    input.ShortURL,
@@ -174,20 +181,84 @@ func (p *Postgres) UpdateLink(ctx context.Context, input UpdateLinkInput) (Link,
 		if isUniqueViolation(err) {
 			return Link{}, ErrURLAlreadyExists
 		}
-		return Link{}, fmt.Errorf("update link: %w", err)
+		return Link{}, fmt.Errorf("%s: %w", op, err)
 	}
 	return toLink(row), nil
 }
 
 func (p *Postgres) DeleteLink(ctx context.Context, id int32) error {
+	const op = "storage.postgres.DeleteLink"
 	n, err := p.q.DeleteLink(ctx, id)
 	if err != nil {
-		return fmt.Errorf("delete link: %w", err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 	if n == 0 {
 		return ErrURLNotFound
 	}
 	return nil
+}
+
+func (p *Postgres) CreateLinkVisit(ctx context.Context, input CreateLinkVisitInput) (LinkVisit, error) {
+	const op = "storage.postgres.CreateLinkVisit"
+	row, err := p.q.CreateLinkVisit(ctx, linksdb.CreateLinkVisitParams{
+		LinkID:    input.LinkID,
+		Ip:        input.IP,
+		UserAgent: input.UserAgent,
+		Status:    input.Status,
+	})
+	if err != nil {
+		return LinkVisit{}, fmt.Errorf("%s: %w", op, err)
+	}
+	return toLinkVisit(row), nil
+}
+
+func (p *Postgres) ListLinkVisits(ctx context.Context, input ListLinkVisitsInput) (ListLinkVisitsResult, error) {
+	const op = "storage.postgres.ListLinkVisits"
+	if input.From < 0 || input.To < input.From {
+		return ListLinkVisitsResult{}, fmt.Errorf("%s: invalid list range: from=%d to=%d", op, input.From, input.To)
+	}
+
+	limit := input.To - input.From + 1
+	offset := input.From
+
+	var (
+		rows  []linksdb.LinkVisit
+		total int64
+		err   error
+	)
+
+	if input.LinkID != nil {
+		rows, err = p.q.ListLinkVisitsByLinkID(ctx, linksdb.ListLinkVisitsByLinkIDParams{
+			LinkID: *input.LinkID,
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			return ListLinkVisitsResult{}, fmt.Errorf("%s: %w", op, err)
+		}
+		total, err = p.q.CountLinkVisitsByLinkID(ctx, *input.LinkID)
+		if err != nil {
+			return ListLinkVisitsResult{}, fmt.Errorf("%s: count by link id: %w", op, err)
+		}
+	} else {
+		rows, err = p.q.ListLinkVisits(ctx, linksdb.ListLinkVisitsParams{
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			return ListLinkVisitsResult{}, fmt.Errorf("%s: %w", op, err)
+		}
+		total, err = p.q.CountLinkVisits(ctx)
+		if err != nil {
+			return ListLinkVisitsResult{}, fmt.Errorf("%s: count: %w", op, err)
+		}
+	}
+
+	visits := make([]LinkVisit, 0, len(rows))
+	for _, row := range rows {
+		visits = append(visits, toLinkVisit(row))
+	}
+	return ListLinkVisitsResult{Visits: visits, Total: total}, nil
 }
 
 func (p *Postgres) Ping(ctx context.Context) error {
@@ -212,6 +283,22 @@ func toLink(row linksdb.Link) Link {
 		ShortURL:    row.ShortUrl,
 		ShortName:   row.ShortName,
 		CreatedAt:   createdAt,
+	}
+}
+
+func toLinkVisit(row linksdb.LinkVisit) LinkVisit {
+	var createdAt time.Time
+	if row.CreatedAt.Valid {
+		createdAt = row.CreatedAt.Time
+	}
+
+	return LinkVisit{
+		ID:        row.ID,
+		LinkID:    row.LinkID,
+		CreatedAt: createdAt,
+		IP:        row.Ip,
+		UserAgent: row.UserAgent,
+		Status:    row.Status,
 	}
 }
 

@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -39,7 +40,7 @@ func TestCreateListGetUpdateDeleteAndRedirect(t *testing.T) {
 	var created map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
 	assert.Equal(t, "hello", created["short_name"])
-	assert.Equal(t, "http://localhost:8080/hello", created["short_url"])
+	assert.Equal(t, "http://localhost:8080/r/hello", created["short_url"])
 	assert.Equal(t, "https://example.com/hello", created["original_url"])
 
 	w = httptest.NewRecorder()
@@ -71,7 +72,8 @@ func TestCreateListGetUpdateDeleteAndRedirect(t *testing.T) {
 	assert.Equal(t, "hello", updated["short_name"])
 
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/hello", nil)
+	req = httptest.NewRequest(http.MethodGet, "/r/hello", nil)
+	req.Header.Set("User-Agent", "curl/8.5.0")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusFound, w.Code)
 	assert.Equal(t, "https://example.org/updated", w.Header().Get("Location"))
@@ -144,6 +146,98 @@ func TestListLinksPagination(t *testing.T) {
 
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/links?range=[5,1]", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestRedirectAndListLinkVisits(t *testing.T) {
+	store, router := newTestRouter()
+
+	created, err := store.CreateLink(t.Context(), storage.CreateLinkInput{
+		OriginalURL: "https://example.com/path",
+		ShortURL:    "http://localhost:8080/r/demo",
+		ShortName:   "demo",
+	})
+	require.NoError(t, err)
+
+	// first redirect
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/r/demo", nil)
+	req.Header.Set("User-Agent", "curl/8.5.0")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "https://example.com/path", w.Header().Get("Location"))
+
+	// second redirect
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/r/demo", nil)
+	req.Header.Set("User-Agent", "test-agent")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusFound, w.Code)
+
+	// list all visits
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/link_visits?range=[0,10]", nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "link_visits 0-1/2", w.Header().Get("Content-Range"))
+
+	var visits []map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &visits))
+	require.Len(t, visits, 2)
+	assert.EqualValues(t, created.ID, visits[0]["link_id"])
+	assert.EqualValues(t, 302, visits[0]["status"])
+	assert.NotEmpty(t, visits[0]["user_agent"])
+
+	// filter by link_id
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/link_visits?link_id=1&range=[0,10]", nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "link_visits 0-1/2", w.Header().Get("Content-Range"))
+
+	// missing code
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/r/missing", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestRedirectFailsClosedWhenVisitInsertFails(t *testing.T) {
+	store, router := newTestRouter()
+
+	_, err := store.CreateLink(t.Context(), storage.CreateLinkInput{
+		OriginalURL: "https://example.com/fail-closed",
+		ShortURL:    "http://localhost:8080/r/fail",
+		ShortName:   "fail",
+	})
+	require.NoError(t, err)
+
+	store.SetCreateVisitError(errors.New("db write failed"))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/r/fail", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Empty(t, w.Header().Get("Location"))
+}
+
+func TestListLinkVisitsInvalidLinkID(t *testing.T) {
+	_, router := newTestRouter()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/link_visits?link_id=abc&range=[0,10]", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/link_visits?link_id=-1&range=[0,10]", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/link_visits?link_id=0&range=[0,10]", nil)
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

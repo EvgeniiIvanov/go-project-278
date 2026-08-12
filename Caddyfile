@@ -6,7 +6,7 @@
 :{$PORT:80} {
 	encode gzip
 
-	# Backend API and health check.
+	# Backend API, health check, and short-link redirects.
 	handle /api/* {
 		reverse_proxy 127.0.0.1:8080
 	}
@@ -15,24 +15,14 @@
 		reverse_proxy 127.0.0.1:8080
 	}
 
+	handle /r/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	# Frontend SPA assets + fallback.
 	handle {
 		root * /app/public
-
-		# Serve real frontend files (js/css/assets/favicon/etc).
-		@file file
-		handle @file {
-			file_server
-		}
-
-		# SPA entrypoint.
-		handle / {
-			rewrite * /index.html
-			file_server
-		}
-
-		# Everything else is a short link -> Go app.
-		handle {
-			reverse_proxy 127.0.0.1:8080
-		}
+		try_files {path} /index.html
+		file_server
 	}
 }

@@ -30,13 +30,18 @@ func TestPoolConfigEnvHelpers(t *testing.T) {
 }
 
 type fakeQuerier struct {
-	listLinksFn          func(ctx context.Context, arg linksdb.ListLinksParams) ([]linksdb.Link, error)
-	countLinksFn         func(ctx context.Context) (int64, error)
-	getLinkByIDFn        func(ctx context.Context, id int32) (linksdb.Link, error)
-	getLinkByShortNameFn func(ctx context.Context, shortName string) (linksdb.Link, error)
-	createLinkFn         func(ctx context.Context, arg linksdb.CreateLinkParams) (linksdb.Link, error)
-	updateLinkFn         func(ctx context.Context, arg linksdb.UpdateLinkParams) (linksdb.Link, error)
-	deleteLinkFn         func(ctx context.Context, id int32) (int64, error)
+	listLinksFn               func(ctx context.Context, arg linksdb.ListLinksParams) ([]linksdb.Link, error)
+	countLinksFn              func(ctx context.Context) (int64, error)
+	getLinkByIDFn             func(ctx context.Context, id int32) (linksdb.Link, error)
+	getLinkByShortNameFn      func(ctx context.Context, shortName string) (linksdb.Link, error)
+	createLinkFn              func(ctx context.Context, arg linksdb.CreateLinkParams) (linksdb.Link, error)
+	updateLinkFn              func(ctx context.Context, arg linksdb.UpdateLinkParams) (linksdb.Link, error)
+	deleteLinkFn              func(ctx context.Context, id int32) (int64, error)
+	createLinkVisitFn         func(ctx context.Context, arg linksdb.CreateLinkVisitParams) (linksdb.LinkVisit, error)
+	listLinkVisitsFn          func(ctx context.Context, arg linksdb.ListLinkVisitsParams) ([]linksdb.LinkVisit, error)
+	countLinkVisitsFn         func(ctx context.Context) (int64, error)
+	listLinkVisitsByLinkIDFn  func(ctx context.Context, arg linksdb.ListLinkVisitsByLinkIDParams) ([]linksdb.LinkVisit, error)
+	countLinkVisitsByLinkIDFn func(ctx context.Context, linkID int32) (int64, error)
 }
 
 func (f *fakeQuerier) ListLinks(ctx context.Context, arg linksdb.ListLinksParams) ([]linksdb.Link, error) {
@@ -59,6 +64,21 @@ func (f *fakeQuerier) UpdateLink(ctx context.Context, arg linksdb.UpdateLinkPara
 }
 func (f *fakeQuerier) DeleteLink(ctx context.Context, id int32) (int64, error) {
 	return f.deleteLinkFn(ctx, id)
+}
+func (f *fakeQuerier) CreateLinkVisit(ctx context.Context, arg linksdb.CreateLinkVisitParams) (linksdb.LinkVisit, error) {
+	return f.createLinkVisitFn(ctx, arg)
+}
+func (f *fakeQuerier) ListLinkVisits(ctx context.Context, arg linksdb.ListLinkVisitsParams) ([]linksdb.LinkVisit, error) {
+	return f.listLinkVisitsFn(ctx, arg)
+}
+func (f *fakeQuerier) CountLinkVisits(ctx context.Context) (int64, error) {
+	return f.countLinkVisitsFn(ctx)
+}
+func (f *fakeQuerier) ListLinkVisitsByLinkID(ctx context.Context, arg linksdb.ListLinkVisitsByLinkIDParams) ([]linksdb.LinkVisit, error) {
+	return f.listLinkVisitsByLinkIDFn(ctx, arg)
+}
+func (f *fakeQuerier) CountLinkVisitsByLinkID(ctx context.Context, linkID int32) (int64, error) {
+	return f.countLinkVisitsByLinkIDFn(ctx, linkID)
 }
 
 func sampleDBLink() linksdb.Link {
@@ -181,4 +201,101 @@ func TestCreateLink_PassesThroughUnexpectedError(t *testing.T) {
 	assert.Error(t, err)
 	assert.NotErrorIs(t, err, ErrURLAlreadyExists)
 	assert.NotErrorIs(t, err, ErrURLNotFound)
+}
+
+func TestCreateLinkVisit_SuccessMapping(t *testing.T) {
+	createdAt := time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)
+	p := newPostgresWithQuerier(&fakeQuerier{
+		createLinkVisitFn: func(ctx context.Context, arg linksdb.CreateLinkVisitParams) (linksdb.LinkVisit, error) {
+			assert.Equal(t, int32(7), arg.LinkID)
+			assert.Equal(t, "1.2.3.4", arg.Ip)
+			assert.Equal(t, "curl/8.5.0", arg.UserAgent)
+			assert.Equal(t, int32(302), arg.Status)
+			return linksdb.LinkVisit{
+				ID:        11,
+				LinkID:    arg.LinkID,
+				CreatedAt: pgtype.Timestamptz{Time: createdAt, Valid: true},
+				Ip:        arg.Ip,
+				UserAgent: arg.UserAgent,
+				Status:    arg.Status,
+			}, nil
+		},
+	})
+
+	got, err := p.CreateLinkVisit(context.Background(), CreateLinkVisitInput{
+		LinkID:    7,
+		IP:        "1.2.3.4",
+		UserAgent: "curl/8.5.0",
+		Status:    302,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(11), got.ID)
+	assert.Equal(t, int32(7), got.LinkID)
+	assert.Equal(t, "1.2.3.4", got.IP)
+	assert.Equal(t, "curl/8.5.0", got.UserAgent)
+	assert.Equal(t, int32(302), got.Status)
+	assert.Equal(t, createdAt, got.CreatedAt)
+}
+
+func TestListLinkVisits_WithAndWithoutFilter(t *testing.T) {
+	visit := linksdb.LinkVisit{
+		ID:        3,
+		LinkID:    9,
+		CreatedAt: pgtype.Timestamptz{Time: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+		Ip:        "10.0.0.1",
+		UserAgent: "agent",
+		Status:    302,
+	}
+
+	t.Run("all visits", func(t *testing.T) {
+		p := newPostgresWithQuerier(&fakeQuerier{
+			listLinkVisitsFn: func(ctx context.Context, arg linksdb.ListLinkVisitsParams) ([]linksdb.LinkVisit, error) {
+				assert.Equal(t, int32(10), arg.Limit)
+				assert.Equal(t, int32(0), arg.Offset)
+				return []linksdb.LinkVisit{visit}, nil
+			},
+			countLinkVisitsFn: func(ctx context.Context) (int64, error) {
+				return 1, nil
+			},
+		})
+
+		result, err := p.ListLinkVisits(context.Background(), ListLinkVisitsInput{From: 0, To: 9})
+		require.NoError(t, err)
+		require.Len(t, result.Visits, 1)
+		assert.Equal(t, int64(1), result.Total)
+		assert.Equal(t, int64(3), result.Visits[0].ID)
+		assert.Equal(t, int32(9), result.Visits[0].LinkID)
+	})
+
+	t.Run("filtered by link id", func(t *testing.T) {
+		linkID := int32(9)
+		p := newPostgresWithQuerier(&fakeQuerier{
+			listLinkVisitsByLinkIDFn: func(ctx context.Context, arg linksdb.ListLinkVisitsByLinkIDParams) ([]linksdb.LinkVisit, error) {
+				assert.Equal(t, int32(9), arg.LinkID)
+				assert.Equal(t, int32(5), arg.Limit)
+				assert.Equal(t, int32(2), arg.Offset)
+				return []linksdb.LinkVisit{visit}, nil
+			},
+			countLinkVisitsByLinkIDFn: func(ctx context.Context, id int32) (int64, error) {
+				assert.Equal(t, int32(9), id)
+				return 4, nil
+			},
+		})
+
+		result, err := p.ListLinkVisits(context.Background(), ListLinkVisitsInput{
+			LinkID: &linkID,
+			From:   2,
+			To:     6,
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Visits, 1)
+		assert.Equal(t, int64(4), result.Total)
+		assert.Equal(t, "10.0.0.1", result.Visits[0].IP)
+	})
+
+	t.Run("invalid range", func(t *testing.T) {
+		p := newPostgresWithQuerier(&fakeQuerier{})
+		_, err := p.ListLinkVisits(context.Background(), ListLinkVisitsInput{From: 5, To: 1})
+		assert.Error(t, err)
+	})
 }

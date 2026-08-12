@@ -58,7 +58,8 @@ Checklist:
    curl -i -X POST https://go-project-278-vs4f.onrender.com/api/links \
      -H "Content-Type: application/json" \
      -d '{"original_url":"https://example.com","short_name":"ex"}'
-   curl -i https://go-project-278-vs4f.onrender.com/ex
+   curl -i https://go-project-278-vs4f.onrender.com/r/ex
+   curl -g -i "https://go-project-278-vs4f.onrender.com/api/link_visits?range=[0,10]"
    ```
 
 7. **Common failures**
@@ -212,10 +213,10 @@ curl -i -X PUT "$BASE_URL/api/links/1" \
 curl -i -X DELETE "$BASE_URL/api/links/1"
 ```
 
-#### Redirect by short name
+#### Redirect by code
 
 ```bash
-curl -i "$BASE_URL/ex"
+curl -i "$BASE_URL/r/ex"
 ```
 
 Expected redirect response includes:
@@ -223,4 +224,17 @@ Expected redirect response includes:
 ```text
 HTTP/1.1 302 Found
 Location: https://example.org/updated
+```
+
+Each successful redirect stores a visit row (`ip`, `user_agent`, `status=302`).
+If visit insert fails, redirect returns `500` (fail closed).
+
+#### List link visits
+
+```bash
+curl -g -i "$BASE_URL/api/link_visits?range=[0,10]"
+# Content-Range: link_visits 0-10/11
+
+# optional filter
+curl -g -i "$BASE_URL/api/link_visits?link_id=1&range=[0,10]"
 ```

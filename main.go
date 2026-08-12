@@ -2,8 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -15,39 +14,45 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+
 	if err := godotenv.Load(); err != nil {
-		fmt.Println("No .env file found, using environment variables")
+		slog.Info("no .env file found, using environment variables")
 	} else {
-		fmt.Println(".env file loaded successfully")
+		slog.Info(".env file loaded successfully")
 	}
 
 	dsn := os.Getenv("SENTRY_DSN")
 	if dsn == "" {
-		fmt.Println("SENTRY_DSN is not set, Sentry disabled")
+		slog.Info("SENTRY_DSN is not set, Sentry disabled")
 	} else {
-		fmt.Printf("SENTRY_DSN is set (length: %d chars), initializing Sentry...\n", len(dsn))
+		slog.Info("initializing Sentry", "dsn_length", len(dsn))
 		if err := sentry.Init(sentry.ClientOptions{
 			Dsn: dsn,
 		}); err != nil {
-			fmt.Printf("Sentry initialization failed: %v\n", err)
+			slog.Error("Sentry initialization failed", "err", err)
 		} else {
-			fmt.Println("Sentry initialized successfully")
+			slog.Info("Sentry initialized successfully")
 		}
 		defer sentry.Flush(2 * time.Second)
 	}
 
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		log.Fatal("DATABASE_URL is required")
+		slog.Error("DATABASE_URL is required")
+		os.Exit(1)
 	}
 
 	ctx := context.Background()
 	store, err := storage.NewPostgres(ctx, databaseURL)
 	if err != nil {
-		log.Fatalf("init db: %v", err)
+		slog.Error("init db failed", "err", err)
+		os.Exit(1)
 	}
 	defer store.Close()
-	fmt.Println("Database connection established")
+	slog.Info("database connection established")
 
 	router := api.NewRouter(store, api.Config{
 		ShortURL:    os.Getenv("SHORT_URL"),
@@ -59,8 +64,9 @@ func main() {
 		port = "8080"
 	}
 
-	fmt.Printf("Starting server on port %s\n", port)
+	slog.Info("starting server", "port", port)
 	if err := router.Run(":" + port); err != nil {
-		log.Fatalf("server failed: %v", err)
+		slog.Error("server failed", "err", err)
+		os.Exit(1)
 	}
 }
