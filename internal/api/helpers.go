@@ -1,10 +1,11 @@
 package api
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -17,6 +18,11 @@ const (
 	defaultRangeFrom int32 = 0
 	defaultRangeTo   int32 = 9
 	maxRangeWindow   int32 = 100
+
+	// 62^8 ~= 2.18e14 combinations; collisions are rare, but still possible.
+	generatedShortNameLen     = 8
+	generatedShortNameRetries = 5
+	shortNameAlphabet         = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
 // parseRangeQuery parses an inclusive range query like "[0,10]" or "0,10".
@@ -111,31 +117,6 @@ func parseIDParam(c *gin.Context) (int32, bool) {
 	return int32(id64), true
 }
 
-func validateLinkInput(originalURL, shortName string) (string, string, error) {
-	originalURL = strings.TrimSpace(originalURL)
-	shortName = strings.TrimSpace(shortName)
-
-	if originalURL == "" {
-		return "", "", errors.New("original_url is required")
-	}
-	if shortName == "" {
-		return "", "", errors.New("short_name is required")
-	}
-	if strings.Contains(shortName, "/") {
-		return "", "", errors.New("short_name must not contain '/'")
-	}
-
-	parsed, err := url.ParseRequestURI(originalURL)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return "", "", errors.New("original_url must be a valid absolute URL")
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", "", errors.New("original_url must use http or https")
-	}
-
-	return originalURL, shortName, nil
-}
-
 func toLinkResponse(link storage.Link) linkResponse {
 	return linkResponse{
 		ID:          link.ID,
@@ -155,4 +136,24 @@ func toLinkVisitResponse(visit storage.LinkVisit) linkVisitResponse {
 		UserAgent: visit.UserAgent,
 		Status:    visit.Status,
 	}
+}
+
+// generateShortName returns a cryptographically random base62 string.
+func generateShortName(length int) (string, error) {
+	if length <= 0 {
+		return "", errors.New("short name length must be positive")
+	}
+
+	var b strings.Builder
+	b.Grow(length)
+
+	max := big.NewInt(int64(len(shortNameAlphabet)))
+	for i := 0; i < length; i++ {
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", fmt.Errorf("generate short name: %w", err)
+		}
+		b.WriteByte(shortNameAlphabet[n.Int64()])
+	}
+	return b.String(), nil
 }

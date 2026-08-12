@@ -92,19 +92,50 @@ func TestCreateListGetUpdateDeleteAndRedirect(t *testing.T) {
 func TestCreateLinkValidationAndConflicts(t *testing.T) {
 	_, router := newTestRouter()
 
-	// invalid url
+	// invalid JSON
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/links", bytes.NewReader([]byte(`{"original_url":"notaurl","short_name":"x"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/api/links", bytes.NewReader([]byte(`{"original_url":`)))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	var invalidJSON map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &invalidJSON))
+	assert.Equal(t, "invalid request", invalidJSON["error"])
 
-	// missing short_name
+	// invalid url -> 422 field error
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/api/links", bytes.NewReader([]byte(`{"original_url":"https://example.com"}`)))
+	req = httptest.NewRequest(http.MethodPost, "/api/links", bytes.NewReader([]byte(`{"original_url":"notaurl","short_name":"demo"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	var invalidURL map[string]map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &invalidURL))
+	require.Contains(t, invalidURL["errors"], "original_url")
+	assert.Contains(t, invalidURL["errors"]["original_url"], "original_url")
+	assert.Contains(t, invalidURL["errors"]["original_url"], "url")
+
+	// short_name too short -> 422
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/links", bytes.NewReader([]byte(`{"original_url":"https://example.com","short_name":"ab"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	var shortNameErr map[string]map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &shortNameErr))
+	require.Contains(t, shortNameErr["errors"], "short_name")
+
+	// missing short_name -> auto-generated 8-char name
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/links", bytes.NewReader([]byte(`{"original_url":"https://example.com/auto"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+	var autoCreated map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &autoCreated))
+	autoName, ok := autoCreated["short_name"].(string)
+	require.True(t, ok)
+	assert.Len(t, autoName, 8)
+	assert.Equal(t, "http://localhost:8080/r/"+autoName, autoCreated["short_url"])
 
 	// create once
 	w = httptest.NewRecorder()
@@ -113,12 +144,15 @@ func TestCreateLinkValidationAndConflicts(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
 
-	// conflict
+	// unique conflict -> 422 field error on short_name
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/api/links", bytes.NewReader([]byte(`{"original_url":"https://example.com/2","short_name":"dup"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusConflict, w.Code)
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	var conflict map[string]map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &conflict))
+	assert.Equal(t, "short name already in use", conflict["errors"]["short_name"])
 }
 
 func TestListLinksPagination(t *testing.T) {
