@@ -42,6 +42,7 @@ func TestCreateListGetUpdateDeleteAndRedirect(t *testing.T) {
 	assert.Equal(t, "hello", created["short_name"])
 	assert.Equal(t, "http://localhost:8080/r/hello", created["short_url"])
 	assert.Equal(t, "https://example.com/hello", created["original_url"])
+	assert.Contains(t, created["short_url"], "/r/")
 
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/links?range=[0,10]", nil)

@@ -9,7 +9,7 @@ import (
 )
 
 func TestGenerateShortName(t *testing.T) {
-	name, err := generateShortName(8)
+	name, err := defaultGenerateShortName(8)
 	require.NoError(t, err)
 	assert.Len(t, name, 8)
 
@@ -18,7 +18,7 @@ func TestGenerateShortName(t *testing.T) {
 	}
 
 	// Extremely likely to differ across calls.
-	other, err := generateShortName(8)
+	other, err := defaultGenerateShortName(8)
 	require.NoError(t, err)
 	assert.NotEqual(t, name, other)
 }

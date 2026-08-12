@@ -138,8 +138,12 @@ func toLinkVisitResponse(visit storage.LinkVisit) linkVisitResponse {
 	}
 }
 
-// generateShortName returns a cryptographically random base62 string.
-func generateShortName(length int) (string, error) {
+// generateShortNameFn is the short-name generator used by createLink.
+// Tests may replace it to force deterministic collision/retry behavior.
+var generateShortNameFn = defaultGenerateShortName
+
+// defaultGenerateShortName returns a cryptographically random base62 string.
+func defaultGenerateShortName(length int) (string, error) {
 	if length <= 0 {
 		return "", errors.New("short name length must be positive")
 	}
