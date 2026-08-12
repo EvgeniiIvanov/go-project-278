@@ -27,6 +27,9 @@ func NewRouter(store storage.Storage, cfg Config) *gin.Engine {
 	router := gin.New()
 	// Caddy proxies from the same container; trust only local hop for ClientIP().
 	_ = router.SetTrustedProxies([]string{"127.0.0.1", "::1"})
+	// Render may sit behind Cloudflare. If CF-Connecting-IP is absent,
+	// Gin falls back to X-Forwarded-For from trusted proxies.
+	router.TrustedPlatform = gin.PlatformCloudflare
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 	router.Use(cors.New(corsConfig(cfg.CORSOrigins)))

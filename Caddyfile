@@ -6,17 +6,25 @@
 :{$PORT:80} {
 	encode gzip
 
-	# Backend API, health check, and short-link redirects.
+	# Shared upstream for Go app.
+	# reverse_proxy already forwards X-Forwarded-* by default.
+	# Also pass Cloudflare header through when Render is behind CF.
 	handle /api/* {
-		reverse_proxy 127.0.0.1:8080
+		reverse_proxy 127.0.0.1:8080 {
+			header_up CF-Connecting-IP {http.request.header.CF-Connecting-IP}
+		}
 	}
 
 	handle /ping {
-		reverse_proxy 127.0.0.1:8080
+		reverse_proxy 127.0.0.1:8080 {
+			header_up CF-Connecting-IP {http.request.header.CF-Connecting-IP}
+		}
 	}
 
 	handle /r/* {
-		reverse_proxy 127.0.0.1:8080
+		reverse_proxy 127.0.0.1:8080 {
+			header_up CF-Connecting-IP {http.request.header.CF-Connecting-IP}
+		}
 	}
 
 	# Frontend SPA assets + fallback.
