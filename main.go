@@ -54,8 +54,13 @@ func main() {
 	defer store.Close()
 	slog.Info("database connection established")
 
+	shortURL := os.Getenv("SHORT_URL")
+	if shortURL == "" {
+		shortURL = "http://127.0.0.1:8080"
+	}
+
 	router := api.NewRouter(store, api.Config{
-		ShortURL:    os.Getenv("SHORT_URL"),
+		ShortURL:    shortURL,
 		CORSOrigins: api.ParseCORSOrigins(os.Getenv("CORS_ORIGINS")),
 	})
 

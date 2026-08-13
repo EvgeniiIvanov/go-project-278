@@ -28,7 +28,7 @@ MIGRATIONS_DIR ?= db/migrations
 DATABASE_URL ?= postgres://shortener:dev_password_123@localhost:5432/shortener_dev?sslmode=disable
 # From inside Docker on Mac/Windows, use host.docker.internal to reach local Postgres.
 DOCKER_DATABASE_URL ?= postgres://shortener:dev_password_123@host.docker.internal:5432/shortener_dev?sslmode=disable
-SHORT_URL ?= http://localhost:$(PUBLIC_PORT)
+SHORT_URL ?= http://127.0.0.1:$(PUBLIC_PORT)
 CONTAINER_NAME ?= shortener-prod
 SENTRY_DSN ?=
 
