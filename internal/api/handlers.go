@@ -140,7 +140,7 @@ func (s *Server) getLinkByID(c *gin.Context) {
 
 func (s *Server) createLink(c *gin.Context) {
 	var req createLinkPayload
-	if !bindJSONPayload(c, &req) {
+	if !bindJSON(c, &req) {
 		return
 	}
 
@@ -205,7 +205,7 @@ func (s *Server) updateLink(c *gin.Context) {
 	}
 
 	var req updateLinkPayload
-	if !bindJSONPayload(c, &req) {
+	if !bindJSON(c, &req) {
 		return
 	}
 

@@ -15,7 +15,7 @@ import (
 )
 
 func init() {
-	// Make validation namespaces use JSON field names:
+	// Use JSON field names in validator messages:
 	// createLinkPayload.original_url instead of createLinkPayload.OriginalURL
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		v.RegisterTagNameFunc(func(fld reflect.StructField) string {
@@ -28,31 +28,20 @@ func init() {
 	}
 }
 
-// Stable error codes for non-field API errors.
-const (
-	CodeNotFound      = "not_found"
-	CodeInternalError = "internal_error"
-)
-
-// Hexlet field-validation contract:
+// Field validation errors:
 // 422 { "errors": { "<field>": "<message>" } }
 type fieldErrorsResponse struct {
 	Errors map[string]string `json:"errors"`
 }
 
-// Hexlet invalid JSON contract:
-// 400 { "error": "invalid request" }
+// Simple message errors:
+// 400/404/500 { "error": "<message>" }
 type plainErrorResponse struct {
 	Error string `json:"error"`
 }
 
-type codeMessageError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-type codeMessageErrorResponse struct {
-	Error codeMessageError `json:"error"`
+func writeError(c *gin.Context, status int, message string) {
+	c.AbortWithStatusJSON(status, plainErrorResponse{Error: message})
 }
 
 func writeFieldErrors(c *gin.Context, fields map[string]string) {
@@ -60,21 +49,17 @@ func writeFieldErrors(c *gin.Context, fields map[string]string) {
 }
 
 func writeInvalidRequest(c *gin.Context) {
-	c.AbortWithStatusJSON(http.StatusBadRequest, plainErrorResponse{Error: "invalid request"})
+	writeError(c, http.StatusBadRequest, "invalid request")
 }
 
 func writeValidationError(c *gin.Context, message string) {
-	// Non-field/query validation still uses a simple 400 payload.
-	c.AbortWithStatusJSON(http.StatusBadRequest, plainErrorResponse{Error: message})
+	writeError(c, http.StatusBadRequest, message)
 }
 
 func writeNotFound(c *gin.Context, message string) {
-	c.AbortWithStatusJSON(http.StatusNotFound, codeMessageErrorResponse{
-		Error: codeMessageError{Code: CodeNotFound, Message: message},
-	})
+	writeError(c, http.StatusNotFound, message)
 }
 
-// writeInternalError logs the real error server-side and returns a generic payload.
 func writeInternalError(c *gin.Context, err error) {
 	slog.Error(
 		"request failed",
@@ -83,13 +68,9 @@ func writeInternalError(c *gin.Context, err error) {
 		"status", http.StatusInternalServerError,
 		"err", err,
 	)
-	c.AbortWithStatusJSON(http.StatusInternalServerError, codeMessageErrorResponse{
-		Error: codeMessageError{Code: CodeInternalError, Message: "internal server error"},
-	})
+	writeError(c, http.StatusInternalServerError, "internal server error")
 }
 
-// writeStorageError maps known domain errors to client responses.
-// Unique conflicts on links are field errors (short_name), as required by Hexlet.
 func writeStorageError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, storage.ErrURLNotFound):
@@ -103,65 +84,38 @@ func writeStorageError(c *gin.Context, err error) {
 	}
 }
 
-// bindJSONPayload binds JSON and maps binding errors to Hexlet response shapes.
-// Returns false when response was already written.
-func bindJSONPayload(c *gin.Context, dst any) bool {
-	if err := c.ShouldBindBodyWith(dst, binding.JSON); err != nil {
-		writeBindError(c, err)
-		return false
+// bindJSON binds JSON body and writes the proper error response on failure.
+// Returns false when the handler should stop.
+func bindJSON(c *gin.Context, dst any) bool {
+	err := c.ShouldBindBodyWith(dst, binding.JSON)
+	if err == nil {
+		return true
 	}
-	return true
-}
 
-func writeBindError(c *gin.Context, err error) {
 	var ve validator.ValidationErrors
-	switch {
-	case errors.As(err, &ve):
+	if errors.As(err, &ve) {
 		fields := make(map[string]string, len(ve))
 		for _, fe := range ve {
-			field := jsonFieldName(fe)
-			fields[field] = fe.Error()
+			fields[fieldName(fe)] = fe.Error()
 		}
 		writeFieldErrors(c, fields)
-	default:
-		// Malformed JSON, empty body, or type mismatch.
-		writeInvalidRequest(c)
+		return false
 	}
+
+	// Malformed JSON, empty body, type mismatches, etc.
+	writeInvalidRequest(c)
+	return false
 }
 
-func jsonFieldName(fe validator.FieldError) string {
-	// Prefer JSON name if available; fallback to lower-snake-ish namespace.
+func fieldName(fe validator.FieldError) string {
+	// With RegisterTagNameFunc, Field() is already the JSON name.
 	name := fe.Field()
-	if ns := fe.Namespace(); ns != "" {
-		// Namespace looks like createLinkPayload.OriginalURL or createLinkPayload.original_url
-		if i := strings.LastIndex(ns, "."); i >= 0 && i+1 < len(ns) {
-			name = ns[i+1:]
-		}
-	}
 	switch name {
-	case "OriginalURL", "original_url":
+	case "OriginalURL":
 		return "original_url"
-	case "ShortName", "short_name":
+	case "ShortName":
 		return "short_name"
 	default:
-		return toSnakeCase(name)
+		return name
 	}
-}
-
-func toSnakeCase(s string) string {
-	if s == "" {
-		return s
-	}
-	var b strings.Builder
-	for i, r := range s {
-		if r >= 'A' && r <= 'Z' {
-			if i > 0 {
-				b.WriteByte('_')
-			}
-			b.WriteRune(r + ('a' - 'A'))
-			continue
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
 }
