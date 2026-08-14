@@ -179,6 +179,23 @@ func TestListLinksPagination(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
 	require.Len(t, page, 2)
 
+	// Hexlet-style large page with space after comma.
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/links?range=%5B0,+1000%5D", nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "links 0-2/3", w.Header().Get("Content-Range"))
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+	require.Len(t, page, 3)
+
+	// Default range when omitted.
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/links", nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+	require.Len(t, page, 3)
+
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/links?range=[5,1]", nil)
 	router.ServeHTTP(w, req)

@@ -17,7 +17,8 @@ import (
 const (
 	defaultRangeFrom int32 = 0
 	defaultRangeTo   int32 = 9
-	maxRangeWindow   int32 = 100
+	// Autotests request ranges like [0, 1000].
+	maxRangeWindow int32 = 1001
 
 	// 62^8 ~= 2.18e14 combinations; collisions are rare, but still possible.
 	generatedShortNameLen     = 8
