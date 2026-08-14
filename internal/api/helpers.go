@@ -77,14 +77,17 @@ func (s *Server) redirectByCode(c *gin.Context) {
 		return
 	}
 
-	link, err := s.store.GetLinkByShortName(c.Request.Context(), code)
+	ctx, cancel := s.withTimeout(c, s.cfg.RedirectTimeout)
+	defer cancel()
+
+	link, err := s.store.GetLinkByShortName(ctx, code)
 	if err != nil {
 		writeStorageError(c, err)
 		return
 	}
 
 	status := http.StatusFound
-	_, err = s.store.CreateLinkVisit(c.Request.Context(), storage.CreateLinkVisitInput{
+	_, err = s.store.CreateLinkVisit(ctx, storage.CreateLinkVisitInput{
 		LinkID:    link.ID,
 		IP:        c.ClientIP(),
 		UserAgent: c.Request.UserAgent(),

@@ -15,20 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPoolConfigEnvHelpers(t *testing.T) {
-	t.Setenv("DB_MAX_CONNS", "20")
-	assert.Equal(t, int32(20), int32FromEnv("DB_MAX_CONNS", defaultMaxConns))
-
-	t.Setenv("DB_MAX_CONNS", "bad")
-	assert.Equal(t, defaultMaxConns, int32FromEnv("DB_MAX_CONNS", defaultMaxConns))
-
-	t.Setenv("DB_MAX_CONN_LIFETIME", "45m")
-	assert.Equal(t, 45*time.Minute, durationFromEnv("DB_MAX_CONN_LIFETIME", defaultMaxConnLifetime))
-
-	t.Setenv("DB_MAX_CONN_LIFETIME", "nope")
-	assert.Equal(t, defaultMaxConnLifetime, durationFromEnv("DB_MAX_CONN_LIFETIME", defaultMaxConnLifetime))
-}
-
 type fakeQuerier struct {
 	listLinksFn               func(ctx context.Context, arg linksdb.ListLinksParams) ([]linksdb.Link, error)
 	countLinksFn              func(ctx context.Context) (int64, error)

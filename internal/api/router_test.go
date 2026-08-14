@@ -12,9 +12,7 @@ import (
 )
 
 func TestPingRouteTableDriven(t *testing.T) {
-	router := api.NewRouter(storage.NewFake(), api.Config{
-		ShortURL: "http://localhost:8080",
-	})
+	router := api.NewRouter(storage.NewFake(), testConfig())
 
 	tests := []struct {
 		name     string

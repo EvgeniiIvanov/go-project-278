@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"code/internal/config"
 	"code/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -15,7 +17,14 @@ import (
 
 type Server struct {
 	store storage.Storage
-	cfg   Config
+	cfg   config.Config
+}
+
+func (s *Server) withTimeout(c *gin.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	if d <= 0 {
+		d = 3 * time.Second
+	}
+	return context.WithTimeout(c.Request.Context(), d)
 }
 
 // createLinkPayload is validated with go-playground/validator via Gin binding.
@@ -59,7 +68,10 @@ func (s *Server) listLinks(c *gin.Context) {
 		return
 	}
 
-	result, err := s.store.ListLinks(c.Request.Context(), storage.ListLinksInput{
+	ctx, cancel := s.withTimeout(c, s.cfg.RequestTimeout)
+	defer cancel()
+
+	result, err := s.store.ListLinks(ctx, storage.ListLinksInput{
 		From: from,
 		To:   to,
 	})
@@ -105,7 +117,10 @@ func (s *Server) listLinkVisits(c *gin.Context) {
 		input.LinkID = &id
 	}
 
-	result, err := s.store.ListLinkVisits(c.Request.Context(), input)
+	ctx, cancel := s.withTimeout(c, s.cfg.RequestTimeout)
+	defer cancel()
+
+	result, err := s.store.ListLinkVisits(ctx, input)
 	if err != nil {
 		writeStorageError(c, err)
 		return
@@ -130,7 +145,10 @@ func (s *Server) getLinkByID(c *gin.Context) {
 		return
 	}
 
-	link, err := s.store.GetLinkByID(c.Request.Context(), id)
+	ctx, cancel := s.withTimeout(c, s.cfg.RequestTimeout)
+	defer cancel()
+
+	link, err := s.store.GetLinkByID(ctx, id)
 	if err != nil {
 		writeStorageError(c, err)
 		return
@@ -155,6 +173,9 @@ func (s *Server) createLink(c *gin.Context) {
 		attempts = generatedShortNameRetries
 	}
 
+	ctx, cancel := s.withTimeout(c, s.cfg.RequestTimeout)
+	defer cancel()
+
 	var (
 		link storage.Link
 		err  error
@@ -175,7 +196,7 @@ func (s *Server) createLink(c *gin.Context) {
 			return
 		}
 
-		link, err = s.store.CreateLink(c.Request.Context(), storage.CreateLinkInput{
+		link, err = s.store.CreateLink(ctx, storage.CreateLinkInput{
 			OriginalURL: originalURL,
 			ShortURL:    shortURL,
 			ShortName:   shortName,
@@ -209,10 +230,13 @@ func (s *Server) updateLink(c *gin.Context) {
 		return
 	}
 
+	ctx, cancel := s.withTimeout(c, s.cfg.RequestTimeout)
+	defer cancel()
+
 	shortName := strings.TrimSpace(req.ShortName)
 	if shortName == "" {
 		// Keep existing short_name when omitted on update.
-		existing, err := s.store.GetLinkByID(c.Request.Context(), id)
+		existing, err := s.store.GetLinkByID(ctx, id)
 		if err != nil {
 			writeStorageError(c, err)
 			return
@@ -226,7 +250,7 @@ func (s *Server) updateLink(c *gin.Context) {
 		return
 	}
 
-	link, err := s.store.UpdateLink(c.Request.Context(), storage.UpdateLinkInput{
+	link, err := s.store.UpdateLink(ctx, storage.UpdateLinkInput{
 		ID:          id,
 		OriginalURL: strings.TrimSpace(req.OriginalURL),
 		ShortURL:    shortURL,
@@ -245,7 +269,10 @@ func (s *Server) deleteLink(c *gin.Context) {
 		return
 	}
 
-	if err := s.store.DeleteLink(c.Request.Context(), id); err != nil {
+	ctx, cancel := s.withTimeout(c, s.cfg.RequestTimeout)
+	defer cancel()
+
+	if err := s.store.DeleteLink(ctx, id); err != nil {
 		writeStorageError(c, err)
 		return
 	}

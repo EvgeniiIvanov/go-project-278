@@ -4,23 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"strconv"
 	"time"
 
+	"code/internal/config"
 	linksdb "code/internal/db/links"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-)
-
-const (
-	defaultMaxConns          = int32(10)
-	defaultMinConns          = int32(1)
-	defaultMaxConnLifetime   = 30 * time.Minute
-	defaultMaxConnIdleTime   = 5 * time.Minute
-	defaultHealthCheckPeriod = 1 * time.Minute
 )
 
 // Postgres is a Postgres-backed Storage implementation.
@@ -30,11 +21,14 @@ type Postgres struct {
 }
 
 // NewPostgres opens a connection pool, pings the database, and returns Storage.
-func NewPostgres(ctx context.Context, databaseURL string) (*Postgres, error) {
+func NewPostgres(ctx context.Context, databaseURL string, dbCfg config.DBConfig) (*Postgres, error) {
 	const op = "storage.postgres.NewPostgres"
 
 	if databaseURL == "" {
 		return nil, fmt.Errorf("%s: database URL is empty", op)
+	}
+	if dbCfg.MinConns > dbCfg.MaxConns {
+		return nil, fmt.Errorf("%s: min conns (%d) cannot be greater than max conns (%d)", op, dbCfg.MinConns, dbCfg.MaxConns)
 	}
 
 	cfg, err := pgxpool.ParseConfig(databaseURL)
@@ -42,22 +36,25 @@ func NewPostgres(ctx context.Context, databaseURL string) (*Postgres, error) {
 		return nil, fmt.Errorf("%s: parse db config: %w", op, err)
 	}
 
-	cfg.MaxConns = int32FromEnv("DB_MAX_CONNS", defaultMaxConns)
-	cfg.MinConns = int32FromEnv("DB_MIN_CONNS", defaultMinConns)
-	cfg.MaxConnLifetime = durationFromEnv("DB_MAX_CONN_LIFETIME", defaultMaxConnLifetime)
-	cfg.MaxConnIdleTime = durationFromEnv("DB_MAX_CONN_IDLE_TIME", defaultMaxConnIdleTime)
-	cfg.HealthCheckPeriod = durationFromEnv("DB_HEALTHCHECK_PERIOD", defaultHealthCheckPeriod)
-
-	if cfg.MinConns > cfg.MaxConns {
-		return nil, fmt.Errorf("%s: DB_MIN_CONNS (%d) cannot be greater than DB_MAX_CONNS (%d)", op, cfg.MinConns, cfg.MaxConns)
-	}
+	cfg.MaxConns = dbCfg.MaxConns
+	cfg.MinConns = dbCfg.MinConns
+	cfg.MaxConnLifetime = dbCfg.MaxConnLifetime
+	cfg.MaxConnIdleTime = dbCfg.MaxConnIdleTime
+	cfg.HealthCheckPeriod = dbCfg.HealthCheckPeriod
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("%s: open db pool: %w", op, err)
 	}
 
-	if err := pool.Ping(ctx); err != nil {
+	pingTimeout := dbCfg.PingTimeout
+	if pingTimeout <= 0 {
+		pingTimeout = 5 * time.Second
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
+	defer cancel()
+
+	if err := pool.Ping(pingCtx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("%s: ping db: %w", op, err)
 	}
@@ -71,32 +68,6 @@ func NewPostgres(ctx context.Context, databaseURL string) (*Postgres, error) {
 // newPostgresWithQuerier is used by unit tests to inject a fake querier.
 func newPostgresWithQuerier(q linksdb.Querier) *Postgres {
 	return &Postgres{q: q}
-}
-
-func int32FromEnv(key string, fallback int32) int32 {
-	raw := os.Getenv(key)
-	if raw == "" {
-		return fallback
-	}
-
-	v, err := strconv.ParseInt(raw, 10, 32)
-	if err != nil || v < 0 {
-		return fallback
-	}
-	return int32(v)
-}
-
-func durationFromEnv(key string, fallback time.Duration) time.Duration {
-	raw := os.Getenv(key)
-	if raw == "" {
-		return fallback
-	}
-
-	d, err := time.ParseDuration(raw)
-	if err != nil || d < 0 {
-		return fallback
-	}
-	return d
 }
 
 func (p *Postgres) ListLinks(ctx context.Context, input ListLinksInput) (ListLinksResult, error) {

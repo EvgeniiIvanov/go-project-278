@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -79,6 +80,8 @@ func writeStorageError(c *gin.Context, err error) {
 		writeFieldErrors(c, map[string]string{
 			"short_name": "short name already in use",
 		})
+	case errors.Is(err, context.DeadlineExceeded):
+		writeError(c, http.StatusGatewayTimeout, "request timeout")
 	default:
 		writeInternalError(c, err)
 	}

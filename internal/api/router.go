@@ -1,9 +1,9 @@
 package api
 
 import (
-	"strings"
 	"time"
 
+	"code/internal/config"
 	"code/internal/storage"
 
 	sentrygin "github.com/getsentry/sentry-go/gin"
@@ -11,14 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Config holds HTTP-layer settings that come from the environment.
-type Config struct {
-	ShortURL    string
-	CORSOrigins []string
-}
-
 // NewRouter builds the application HTTP router.
-func NewRouter(store storage.Storage, cfg Config) *gin.Engine {
+func NewRouter(store storage.Storage, cfg config.Config) *gin.Engine {
 	server := &Server{
 		store: store,
 		cfg:   cfg,
@@ -72,22 +66,4 @@ func corsConfig(origins []string) cors.Config {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}
-}
-
-// ParseCORSOrigins splits a comma-separated CORS_ORIGINS value.
-func ParseCORSOrigins(raw string) []string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-
-	parts := strings.Split(raw, ",")
-	origins := make([]string, 0, len(parts))
-	for _, part := range parts {
-		origin := strings.TrimSpace(part)
-		if origin != "" {
-			origins = append(origins, origin)
-		}
-	}
-	return origins
 }

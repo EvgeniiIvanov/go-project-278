@@ -16,7 +16,7 @@ import (
 
 func TestCreateLinkGeneratedNameRetriesOnCollision(t *testing.T) {
 	store := storage.NewFake()
-	router := NewRouter(store, Config{ShortURL: "http://localhost:8080"})
+	router := NewRouter(store, testConfig())
 
 	// Occupy the first generated candidate.
 	_, err := store.CreateLink(t.Context(), storage.CreateLinkInput{
@@ -54,7 +54,7 @@ func TestCreateLinkGeneratedNameRetriesOnCollision(t *testing.T) {
 
 func TestUpdateLinkValidationAndShortURL(t *testing.T) {
 	store := storage.NewFake()
-	router := NewRouter(store, Config{ShortURL: "http://localhost:8080"})
+	router := NewRouter(store, testConfig())
 
 	created, err := store.CreateLink(t.Context(), storage.CreateLinkInput{
 		OriginalURL: "https://example.com/one",

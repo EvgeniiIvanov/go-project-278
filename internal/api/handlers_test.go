@@ -17,7 +17,7 @@ import (
 
 func newTestRouter() (*storage.Fake, http.Handler) {
 	store := storage.NewFake()
-	router := api.NewRouter(store, api.Config{ShortURL: "http://localhost:8080"})
+	router := api.NewRouter(store, testConfig())
 	return store, router
 }
 
