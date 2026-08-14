@@ -1,240 +1,259 @@
-### Quality & Testing
-| Status | Badge |
-|--------|-------|
-| CI Pipeline | [![CI](https://github.com/EvgeniiIvanov/go-project-278/actions/workflows/ci.yml/badge.svg)](https://github.com/EvgeniiIvanov/go-project-278/actions/workflows/ci.yml) |
+# URL Shortener
 
-### Hexlet tests and linter status:
-[![Actions Status](https://github.com/EvgeniiIvanov/go-project-278/actions/workflows/hexlet-check.yml/badge.svg)](https://github.com/EvgeniiIvanov/go-project-278/actions)
+Go backend for a URL shortener with link management, redirect tracking, and a ready-to-run frontend package.
 
-### Demo
-The app is deployed on Render:
+The service stores original URLs, generates or accepts short names, redirects via `/r/:code`, and records visit metadata (IP, user-agent, status). In production-style mode it runs as one Docker service: Caddy serves the SPA and proxies API/redirect traffic to the Go app.
 
-- [Ping](https://go-project-278-vs4f.onrender.com/ping)
+## Features
 
-### Render TODO
+- CRUD API for links (`/api/links`)
+- Auto-generation of `short_name` (8 chars) or custom names
+- Redirect endpoint with visit logging (`/r/:code`)
+- Visit history API with pagination and optional `link_id` filter
+- Postgres storage (pgx + sqlc + goose migrations)
+- Structured config and request timeouts
+- Sentry-ready error reporting
+- Single-container deploy (Caddy + Go + frontend)
 
-Single Docker web service serves both frontend and backend:
+## Demo
 
-- Caddy listens on Render `$PORT`
-- Go API listens internally on `8080`
-- Frontend static files are served from `/app/public`
-- `/api/*`, `/ping`, and short links are proxied to Go
-- SPA routes fall back to `index.html`
+- App: [https://go-project-278-vs4f.onrender.com](https://go-project-278-vs4f.onrender.com)
+- Health: [https://go-project-278-vs4f.onrender.com/ping](https://go-project-278-vs4f.onrender.com/ping)
 
-Checklist:
+## Status
 
-1. **Web service**
-   - Runtime: Docker
-   - Repo branch: `main`
-   - Health check path: `/ping`
+| Check | Badge |
+|-------|-------|
+| CI | [![CI](https://github.com/EvgeniiIvanov/go-project-278/actions/workflows/ci.yml/badge.svg)](https://github.com/EvgeniiIvanov/go-project-278/actions/workflows/ci.yml) |
+| Hexlet checks | [![Hexlet](https://github.com/EvgeniiIvanov/go-project-278/actions/workflows/hexlet-check.yml/badge.svg)](https://github.com/EvgeniiIvanov/go-project-278/actions) |
+| SonarCloud | [![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=EvgeniiIvanov_go-project-278&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=EvgeniiIvanov_go-project-278) |
 
-2. **Postgres**
-   - Create a Render Postgres instance
-   - Link it to the web service (or copy `DATABASE_URL`)
+## Project structure
 
-3. **Environment variables**
-   - `DATABASE_URL` from Render Postgres
-   - `PORT` is set by Render automatically (public Caddy port)
-   - `SHORT_URL=https://go-project-278-vs4f.onrender.com`
-   - `SENTRY_DSN=...` (optional)
-   - optional pool settings: `DB_MAX_CONNS`, `DB_MIN_CONNS`, ...
-   - `CORS_ORIGINS` is usually unnecessary for same-origin frontend/API
+```text
+.
+├── main.go                 # process entrypoint (config, db, router)
+├── internal/
+│   ├── api/                # HTTP router, handlers, validation
+│   ├── config/             # typed env config + timeouts
+│   ├── storage/            # storage interface, Postgres, Fake
+│   └── db/links/           # sqlc-generated DB code
+├── db/
+│   ├── migrations/         # goose SQL migrations
+│   └── query/              # sqlc query definitions
+├── scripts/run.sh          # container entrypoint (migrate + app + caddy)
+├── Caddyfile               # reverse proxy + SPA static files
+├── Dockerfile              # multi-stage production image
+├── docker-compose.yml      # local Postgres
+├── Makefile                # dev/prod helpers
+├── sqlc.yaml
+├── package.json            # frontend package for Docker build
+└── .env.example
+```
 
-4. **Migrations**
-   - image entrypoint (`scripts/run.sh`) runs `goose up` before app/Caddy
-   - if logs show `relation "links" does not exist`, migrations did not apply
-   - check Render logs for `[run.sh] Running DB migrations`
+## Architecture (runtime)
 
-5. **Required committed frontend files**
-   - `package.json`
-   - `package-lock.json`
-   - Docker installs `@hexlet/project-url-shortener-frontend` via `npm ci`
+### Local dev (split)
 
-6. **Smoke checks after deploy**
-   ```bash
-   curl -i https://go-project-278-vs4f.onrender.com/ping
-   curl -i https://go-project-278-vs4f.onrender.com/
-   curl -g -i "https://go-project-278-vs4f.onrender.com/api/links?range=[0,10]"
-   curl -i -X POST https://go-project-278-vs4f.onrender.com/api/links \
-     -H "Content-Type: application/json" \
-     -d '{"original_url":"https://example.com","short_name":"ex"}'
-   curl -i https://go-project-278-vs4f.onrender.com/r/ex
-   curl -g -i "https://go-project-278-vs4f.onrender.com/api/link_visits?range=[0,10]"
-   ```
+```text
+Browser UI (:5173) -> Go API (:8080) -> Postgres
+```
 
-7. **Common failures**
-   - missing/wrong `DATABASE_URL`
-   - migrations failed before app start
-   - `SHORT_URL` still points to localhost
-   - `package-lock.json` not committed (`npm ci` fails)
-   - free instance cold start: first request can be slow
+### Production-style / Render (single service)
 
-### Local development
+```text
+Client
+  -> Caddy (:$PORT)
+      -> static frontend (/app/public)
+      -> Go API (127.0.0.1:8080) for /api/*, /ping, /r/*
+          -> Postgres
+```
 
-#### 1. Backend prerequisites
+## Quick start (local backend)
+
+### Prerequisites
 
 - Go (see `go.mod`)
-- Docker (for local Postgres)
-- copy env file:
+- Docker
+- optional: Air for live reload
+
+### Setup
 
 ```bash
 cp .env.example .env
+make postgres-up
+make migrate-up
+make run
+# or: air
 ```
 
-Important local values:
+Backend: http://127.0.0.1:8080
+
+Important defaults:
 
 ```env
 PORT=8080
-SHORT_URL=http://localhost:8080
-CORS_ORIGINS=http://localhost:5173
+SHORT_URL=http://127.0.0.1:8080
 DATABASE_URL=postgres://shortener:dev_password_123@localhost:5432/shortener_dev?sslmode=disable
+REQUEST_TIMEOUT=3s
+REDIRECT_TIMEOUT=2s
 ```
 
-#### 2. Start Postgres and migrate
-
-```bash
-make postgres-up
-make migrate-up
-```
-
-Note: `make migrate-*` does not load `.env`. It uses the Makefile `DATABASE_URL` default, or a value you pass explicitly:
+Note: `make migrate-*` does not load `.env`. It uses the Makefile `DATABASE_URL` default unless overridden:
 
 ```bash
 make migrate-up DATABASE_URL="postgres://..."
 ```
 
-#### 3. Start backend
+## Local frontend (optional, split mode)
 
 ```bash
-make run
-# or, with live reload:
-air
-```
-
-Backend: `http://localhost:8080`
-
-#### 4. Frontend prerequisites
-
-- Node.js `>= 24.1.0` (`node -v`)
-- install package:
-
-```bash
+# Node.js >= 24.1.0
 npm install @hexlet/project-url-shortener-frontend
-```
-
-#### 5. Start frontend
-
-```bash
 npx start-hexlet-url-shortener-frontend
 ```
 
-Frontend: `http://localhost:5173`
+Frontend: http://localhost:5173
 
-If the frontend asks for an API URL, use `http://localhost:8080`.
+Point API base URL to http://127.0.0.1:8080 if asked.
 
-#### 6. Run backend + frontend together (optional)
+## Production-style local run
 
 ```bash
-npm install -g concurrently
-# or use npx concurrently
-
-concurrently \
-  "make run" \
-  "npx start-hexlet-url-shortener-frontend"
+make prod-up
+# open http://127.0.0.1:8080
+make prod-stop
 ```
 
-#### 7. Local smoke checks
+## API overview
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /ping | health check |
+| GET | /api/links | list links (?range=[from,to]) |
+| POST | /api/links | create link |
+| GET | /api/links/:id | get link |
+| PUT | /api/links/:id | update link |
+| DELETE | /api/links/:id | delete link |
+| GET | /r/:code | redirect + store visit |
+| GET | /api/link_visits | list visits (?range=, optional link_id) |
+
+### Validation / errors
+
+- invalid JSON: `400 { "error": "invalid request" }`
+- field validation: `422 { "errors": { "<field>": "<message>" } }`
+- not found: `404 { "error": "link not found" }`
+- timeout: `504 { "error": "request timeout" }`
+- internal: `500 { "error": "internal server error" }`
+
+Create/update rules:
+
+- `original_url`: required, valid URL
+- `short_name`: optional; if set, min 3 max 32; unique
+- if `short_name` omitted on create, server generates 8-char code
+
+### Curl examples
 
 ```bash
-curl -i http://localhost:8080/ping
-curl -g -i "http://localhost:8080/api/links?range=[0,10]"
-open http://localhost:5173
-```
+BASE_URL=http://127.0.0.1:8080
 
-### API examples (curl)
-
-Base URL for local development:
-
-```bash
-BASE_URL=http://localhost:8080
-```
-
-#### Health check
-
-```bash
+# health
 curl -i "$BASE_URL/ping"
-```
 
-#### Create link
-
-```bash
+# create with custom name
 curl -i -X POST "$BASE_URL/api/links" \
   -H "Content-Type: application/json" \
-  -d '{
-    "original_url": "https://example.com",
-    "short_name": "ex"
-  }'
-```
+  -d '{"original_url":"https://example.com","short_name":"docs"}'
 
-#### List links
+# create with auto-generated name
+curl -i -X POST "$BASE_URL/api/links" \
+  -H "Content-Type: application/json" \
+  -d '{"original_url":"https://example.com/auto"}'
 
-Inclusive range pagination via `range=[from,to]`.
-Default is `[0,9]`. Response includes `Content-Range: links <from>-<to>/<total>`.
-
-Note: curl treats `[]` as glob characters. Use `-g` (or `--globoff`), or encode brackets as `%5B` / `%5D`.
-
-```bash
+# list (curl needs -g because of [])
 curl -g -i "$BASE_URL/api/links?range=[0,10]"
-# or
-curl -i "$BASE_URL/api/links?range=%5B0,10%5D"
-# Content-Range: links 0-10/11
-```
 
-#### Get link by id
-
-```bash
+# get / update / delete
 curl -i "$BASE_URL/api/links/1"
-```
-
-#### Update link by id
-
-```bash
 curl -i -X PUT "$BASE_URL/api/links/1" \
   -H "Content-Type: application/json" \
-  -d '{
-    "original_url": "https://example.org/updated",
-    "short_name": "ex"
-  }'
-```
-
-#### Delete link by id
-
-```bash
+  -d '{"original_url":"https://example.org","short_name":"docs"}'
 curl -i -X DELETE "$BASE_URL/api/links/1"
-```
 
-#### Redirect by code
+# redirect
+curl -i "$BASE_URL/r/docs"
 
-```bash
-curl -i "$BASE_URL/r/ex"
-```
-
-Expected redirect response includes:
-
-```text
-HTTP/1.1 302 Found
-Location: https://example.org/updated
-```
-
-Each successful redirect stores a visit row (`ip`, `user_agent`, `status=302`).
-If visit insert fails, redirect returns `500` (fail closed).
-
-#### List link visits
-
-```bash
+# visits
 curl -g -i "$BASE_URL/api/link_visits?range=[0,10]"
-# Content-Range: link_visits 0-10/11
-
-# optional filter
 curl -g -i "$BASE_URL/api/link_visits?link_id=1&range=[0,10]"
 ```
+
+## Render deploy
+
+One Docker web service is enough.
+
+1. **Web service**
+   - Runtime: Docker
+   - Branch: `main`
+   - Health check: `/ping`
+
+2. **Postgres**
+   - Create Render Postgres
+   - Link it (or copy `DATABASE_URL`)
+
+3. **Env vars**
+   - `DATABASE_URL` (required)
+   - `PORT` (set by Render)
+   - `SHORT_URL=https://go-project-278-vs4f.onrender.com`
+   - optional: `SENTRY_DSN`, pool/timeout settings
+
+4. **Startup**
+   - `scripts/run.sh` runs migrations, starts Go on `:8080`, starts Caddy on `$PORT`
+
+5. **Smoke checks**
+
+```bash
+curl -i https://go-project-278-vs4f.onrender.com/ping
+curl -i https://go-project-278-vs4f.onrender.com/
+curl -g -i "https://go-project-278-vs4f.onrender.com/api/links?range=[0,10]"
+curl -i -X POST https://go-project-278-vs4f.onrender.com/api/links \
+  -H "Content-Type: application/json" \
+  -d '{"original_url":"https://example.com","short_name":"ex"}'
+curl -i https://go-project-278-vs4f.onrender.com/r/ex
+curl -g -i "https://go-project-278-vs4f.onrender.com/api/link_visits?range=[0,10]"
+```
+
+### Common deploy issues
+
+- missing/wrong `DATABASE_URL`
+- migrations failed (`relation "links" does not exist`)
+- `SHORT_URL` still points to localhost/`127.0.0.1`
+- `package-lock.json` missing for Docker `npm ci`
+- free instance cold start is slow on first request
+
+## Make targets
+
+```bash
+make help
+make test
+make lint
+make sqlc
+make migrate-up
+make migrate-down
+make migrate-status
+make postgres-up
+make postgres-down
+make run
+make prod-up
+make prod-stop
+```
+
+## Tech stack
+
+- Go + Gin
+- Postgres + pgx + sqlc + goose
+- Caddy
+- Docker / Docker Compose
+- Sentry
+- Frontend package: `@hexlet/project-url-shortener-frontend`
+
