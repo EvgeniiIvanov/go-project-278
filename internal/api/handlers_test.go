@@ -255,11 +255,11 @@ func TestRedirectAndListLinkVisits(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestRedirectFailsClosedWhenVisitInsertFails(t *testing.T) {
+func TestRedirectFailsOpenWhenVisitInsertFails(t *testing.T) {
 	store, router := newTestRouter()
 
 	_, err := store.CreateLink(t.Context(), storage.CreateLinkInput{
-		OriginalURL: "https://example.com/fail-closed",
+		OriginalURL: "https://example.com/fail-open",
 		ShortURL:    "http://localhost:8080/r/fail",
 		ShortName:   "fail",
 	})
@@ -271,8 +271,9 @@ func TestRedirectFailsClosedWhenVisitInsertFails(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/r/fail", nil)
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Empty(t, w.Header().Get("Location"))
+	// Redirect must still work even if analytics write fails.
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "https://example.com/fail-open", w.Header().Get("Location"))
 }
 
 func TestListLinkVisitsInvalidLinkID(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -95,9 +96,14 @@ func (s *Server) redirectByCode(c *gin.Context) {
 		Status:    int32(status),
 	})
 	if err != nil {
-		// Fail closed: do not redirect if visit could not be recorded.
-		writeStorageError(c, err)
-		return
+		// Visit logging is analytics, not core redirect behavior.
+		// Log and continue so users are not blocked by tracking failures.
+		slog.Error(
+			"failed to record link visit",
+			"code", code,
+			"link_id", link.ID,
+			"err", err,
+		)
 	}
 
 	c.Redirect(status, link.OriginalURL)
