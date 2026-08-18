@@ -9,17 +9,17 @@ import (
 )
 
 const (
-	defaultPort                 = "8080"
-	defaultShortURL             = "http://127.0.0.1:8080"
-	defaultCORSOrigin           = "http://localhost:5173"
-	defaultDBMaxConns           = int32(10)
-	defaultDBMinConns           = int32(1)
-	defaultDBMaxConnLifetime     = 30 * time.Minute
-	defaultDBMaxConnIdleTime    = 5 * time.Minute
-	defaultDBHealthCheckPeriod  = 1 * time.Minute
-	defaultDBPingTimeout        = 5 * time.Second
-	defaultRequestTimeout       = 3 * time.Second
-	defaultRedirectTimeout      = 2 * time.Second
+	defaultPort                = "8080"
+	defaultShortURL            = "http://127.0.0.1:8080"
+	defaultCORSOrigin          = "http://localhost:5173"
+	defaultDBMaxConns          = int32(10)
+	defaultDBMinConns          = int32(1)
+	defaultDBMaxConnLifetime   = 30 * time.Minute
+	defaultDBMaxConnIdleTime   = 5 * time.Minute
+	defaultDBHealthCheckPeriod = 1 * time.Minute
+	defaultDBPingTimeout       = 5 * time.Second
+	defaultRequestTimeout      = 3 * time.Second
+	defaultRedirectTimeout     = 2 * time.Second
 )
 
 // Config is the process configuration loaded once at startup.
@@ -42,7 +42,7 @@ type Config struct {
 type DBConfig struct {
 	MaxConns          int32
 	MinConns          int32
-	MaxConnLifetime    time.Duration
+	MaxConnLifetime   time.Duration
 	MaxConnIdleTime   time.Duration
 	HealthCheckPeriod time.Duration
 	PingTimeout       time.Duration
@@ -60,7 +60,7 @@ func Load() (Config, error) {
 		DB: DBConfig{
 			MaxConns:          getInt32("DB_MAX_CONNS", defaultDBMaxConns),
 			MinConns:          getInt32("DB_MIN_CONNS", defaultDBMinConns),
-			MaxConnLifetime:    getDuration("DB_MAX_CONN_LIFETIME", defaultDBMaxConnLifetime),
+			MaxConnLifetime:   getDuration("DB_MAX_CONN_LIFETIME", defaultDBMaxConnLifetime),
 			MaxConnIdleTime:   getDuration("DB_MAX_CONN_IDLE_TIME", defaultDBMaxConnIdleTime),
 			HealthCheckPeriod: getDuration("DB_HEALTHCHECK_PERIOD", defaultDBHealthCheckPeriod),
 			PingTimeout:       getDuration("DB_PING_TIMEOUT", defaultDBPingTimeout),
